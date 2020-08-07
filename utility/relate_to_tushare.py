@@ -7,17 +7,20 @@ import os
 from datetime import datetime, timedelta
 import tushare as ts
 from utility.tool0 import Data
-from utility.constant import NH_index_dict, tds_interface, code_name_map_citic, code_name_map_sw, index_code_name_map
+from utility.constant import NH_index_dict, tds_interface, date_dair
 from WindPy import *
 
-token_path = r'C:\token_tushare.txt'
-if os.path.exists(token_path):
-    f = open(token_path)
-    token = f.read()
-    f.close()
+# Wind里面的后缀是CFE, tushare的后缀是CFX
 
-    ts.set_token(token)
-    pro = ts.pro_api()
+if tds_interface == 'tushare':
+    token_path = r'C:\token_tushare.txt'
+    if os.path.exists(token_path):
+        f = open(token_path)
+        token = f.read()
+        f.close()
+
+        ts.set_token(token)
+        pro = ts.pro_api()
 
 
 # 得到月度频率数据的日期
@@ -47,19 +50,18 @@ def get_domain():
         domain_ih = pro.fut_mapping(ts_code='IH.CFX')
         domain_ic = pro.fut_mapping(ts_code='IC.CFX')
 
-
         return domain_if, domain_ih, domain_ic
     except Exception as e:
         return None
 
-# Wind里面的后缀是CFE, tushare的后缀是CFX
-
-
-# 获取单日全部股票数据
-# df = pro.moneyflow(trade_date='20190315')
-
 
 def update_stock_future_dat():
+    update_each_future()
+    update_futmap()
+
+
+def update_each_future():
+
     # 1, 下载所有的日度价量信息
     data = Data()
 
@@ -75,84 +77,125 @@ def update_stock_future_dat():
 
     his_df = his_df.loc[save_l, :]
     his_df = his_df.drop(['symbol'], axis=1)
+    his_df = his_df.set_index('ts_code')
     his_df = his_df.sort_values("list_date")
-    his_df.index = range(0, len(his_df))
 
-    all_his_open_df = pd.DataFrame()
-    all_his_close_df = pd.DataFrame()
-    all_his_vol_df = pd.DataFrame()
-    all_his_amount_df = pd.DataFrame()
-    all_his_oi_df = pd.DataFrame()
+    try:
+        all_his_open_df = data.sf_open_daily
+        all_his_close_df = data.sf_close_daily
+        all_his_vol_df = data.sf_vol_daily
+        all_his_amount_df = data.sf_amount_daily
+        all_his_oi_df = data.sf_oi_daily
+        start_d = all_his_open_df.columns[-1]
+    except Exception as e:
+        all_his_open_df = pd.DataFrame()
+        all_his_close_df = pd.DataFrame()
+        all_his_vol_df = pd.DataFrame()
+        all_his_amount_df = pd.DataFrame()
+        all_his_oi_df = pd.DataFrame()
+        start_d = datetime(2009, 1, 1).strftime("%Y%m%d")
 
-    for i, se in his_df.iterrows():
+    # 新的合约
+    new_contracts = [c for c in his_df.index if c not in all_his_open_df.index]
+    # 已经有的合约
+    his_contracts = [c for c in his_df.index if c in all_his_open_df.index]
+
+    # todo 明天验证一下
+    for i, se in his_df.loc[his_contracts, :].iterrows():
         # 确定截至日期
-        if datetime.strptime(se['delist_date'], "%Y%m%d") > datetime.today():
+        if datetime.strptime(se['delist_date'], "%Y%m%d") >= datetime.today():
             ed = (datetime.today() - timedelta(1)).strftime("%Y%m%d")
         else:
-            ed = se['delist_date']
-        res_tmp = pro.fut_daily(ts_code=se['ts_code'], start_date=se['list_date'], end_date=ed)
+            # 该合约已经退市，做下一个循环
+            continue
+
+        res_tmp = pro.fut_daily(ts_code=i, start_date=start_d, end_date=ed)
 
         res_tmp.set_index('trade_date', inplace=True)
         res_tmp.index = pd.to_datetime(res_tmp.index)
         res_tmp.sort_index(inplace=True)
 
-        all_his_open_df = pd.concat([all_his_open_df, pd.DataFrame({se['ts_code']: res_tmp['open']}).T], axis=0)
-        all_his_close_df = pd.concat([all_his_close_df, pd.DataFrame({se['ts_code']: res_tmp['close']}).T], axis=0)
-        all_his_vol_df = pd.concat([all_his_vol_df, pd.DataFrame({se['ts_code']: res_tmp['vol']}).T], axis=0)
-        all_his_amount_df = pd.concat([all_his_amount_df, pd.DataFrame({se['ts_code']: res_tmp['amount']}).T], axis=0)
-        all_his_oi_df = pd.concat([all_his_oi_df, pd.DataFrame({se['ts_code']: res_tmp['oi']}).T], axis=0)
-
+        all_his_open_df.loc[i, res_tmp.index] = res_tmp['open']
+        all_his_close_df.loc[i, res_tmp.index] = res_tmp['close']
+        all_his_vol_df.loc[i, res_tmp.index] = res_tmp['vol']
+        all_his_amount_df.loc[i, res_tmp.index] = res_tmp['amount']
+        all_his_oi_df.loc[i, res_tmp.index] = res_tmp['oi']
         # 您每分钟最多访问该接口20次
         sleep(3)
 
-    p = r'D:\pythoncode\IndexEnhancement\指数相关\history_data'
+    if len(new_contracts) > 0:
+        # 有新的合约上市交易
+        for i, se in his_df.loc[new_contracts, :].iterrows():
+            ed = (datetime.today() - timedelta(1)).strftime("%Y%m%d")
+
+            res_tmp = pro.fut_daily(ts_code=i, start_date=se['list_date'], end_date=ed)
+
+            res_tmp.set_index('trade_date', inplace=True)
+            res_tmp.index = pd.to_datetime(res_tmp.index)
+            res_tmp.sort_index(inplace=True)
+
+            all_his_open_df = pd.concat([all_his_open_df, pd.DataFrame({i: res_tmp['open']}).T], axis=0)
+            all_his_close_df = pd.concat([all_his_close_df, pd.DataFrame({i: res_tmp['close']}).T], axis=0)
+            all_his_vol_df = pd.concat([all_his_vol_df, pd.DataFrame({i: res_tmp['vol']}).T], axis=0)
+            all_his_amount_df = pd.concat([all_his_amount_df, pd.DataFrame({i: res_tmp['amount']}).T], axis=0)
+            all_his_oi_df = pd.concat([all_his_oi_df, pd.DataFrame({i: res_tmp['oi']}).T], axis=0)
+            # 您每分钟最多访问该接口20次
+            sleep(3)
+
+    p = os.path.join(date_dair, 'index', 'stock_future')
     data.save(all_his_open_df, 'sf_open_daily', save_path=p)
     data.save(all_his_close_df, 'sf_close_daily', save_path=p)
     data.save(all_his_vol_df, 'sf_vol_daily', save_path=p)
     data.save(all_his_amount_df, 'sf_amount_daily', save_path=p)
     data.save(all_his_oi_df, 'sf_oi_daily', save_path=p)
+    print('期货合约价量数据下载完毕')
 
-    # try:
-    #     fut_map = data.fut_map
-    #     start_d = fut_map.index[-1]
-    # except Exception as e:
-    #     fut_map = pd.DataFrame()
-    #     start_d = datetime(2009, 1, 1).strftime("%Y%m%d")
-    #
-    # end_d = datetime.today().strftime("%Y%m%d")
-    #
-    # domain_if = pro.fut_mapping(ts_code='IF.CFX', start_date=start_d, end_date=end_d)
-    # domain_ih = pro.fut_mapping(ts_code='IH.CFX', start_date=start_d, end_date=end_d)
-    # domain_ic = pro.fut_mapping(ts_code='IC.CFX', start_date=start_d, end_date=end_d)
-    #
-    # domain_if.set_index('trade_date', inplace=True)
-    # domain_ih.set_index('trade_date', inplace=True)
-    # domain_ic.set_index('trade_date', inplace=True)
-    #
-    # domain_if.drop('ts_code', axis=1, inplace=True)
-    # domain_ih.drop('ts_code', axis=1, inplace=True)
-    # domain_ic.drop('ts_code', axis=1, inplace=True)
-    #
-    # domain_if.columns = ['IF']
-    # domain_ih.columns = ['IH']
-    # domain_ic.columns = ['IC']
-    #
-    # domain_if.index = pd.to_datetime(domain_if.index)
-    # domain_if.sort_index(inplace=True)
-    # domain_ih.index = pd.to_datetime(domain_ih.index)
-    # domain_ih.sort_index(inplace=True)
-    # domain_ic.index = pd.to_datetime(domain_ic.index)
-    # domain_ic.sort_index(inplace=True)
-    #
-    # domain_fut = pd.concat([domain_if, domain_ih, domain_ic], axis=1)
-    # domain_fut = domain_fut.applymap(lambda x: x.split('.CFX')[0] + '.CFE' if isinstance(x, str) else x)
-    #
-    # fut_map = pd.concat([fut_map, domain_fut], axis=0)
-    # p = r'D:\pythoncode\IndexEnhancement\指数相关'
-    # data.save(fut_map, 'fut_map', save_path=p)
-    #
-    #
-    print('下载完毕')
+
+def update_futmap():
+    data = Data()
+    try:
+        fut_map = data.fut_map.T
+        start_d = fut_map.index[-1].strftime("%Y%m%d")
+    except Exception as e:
+        fut_map = pd.DataFrame()
+        start_d = datetime(2009, 1, 1).strftime("%Y%m%d")
+
+    end_d = datetime.today().strftime("%Y%m%d")
+
+    domain_if = pro.fut_mapping(ts_code='IF.CFX', start_date=start_d, end_date=end_d)
+    domain_ih = pro.fut_mapping(ts_code='IH.CFX', start_date=start_d, end_date=end_d)
+    domain_ic = pro.fut_mapping(ts_code='IC.CFX', start_date=start_d, end_date=end_d)
+
+    domain_if.set_index('trade_date', inplace=True)
+    domain_ih.set_index('trade_date', inplace=True)
+    domain_ic.set_index('trade_date', inplace=True)
+
+    domain_if.drop('ts_code', axis=1, inplace=True)
+    domain_ih.drop('ts_code', axis=1, inplace=True)
+    domain_ic.drop('ts_code', axis=1, inplace=True)
+
+    domain_if.columns = ['IF']
+    domain_ih.columns = ['IH']
+    domain_ic.columns = ['IC']
+
+    domain_if.index = pd.to_datetime(domain_if.index)
+    domain_if.sort_index(inplace=True)
+    domain_ih.index = pd.to_datetime(domain_ih.index)
+    domain_ih.sort_index(inplace=True)
+    domain_ic.index = pd.to_datetime(domain_ic.index)
+    domain_ic.sort_index(inplace=True)
+
+    domain_fut = pd.concat([domain_if, domain_ih, domain_ic], axis=1)
+    domain_fut = domain_fut.applymap(lambda x: x.split('.CFX')[0] + '.CFE' if isinstance(x, str) else x)
+
+    dupl = [i for i in domain_fut.index if i in fut_map.index]
+    domain_fut.drop(dupl, axis=0, inplace=True)
+
+    fut_map = pd.concat([fut_map, domain_fut], axis=0)
+    p = os.path.join(date_dair, 'index')
+    data.save(fut_map, 'fut_map', save_path=p)
+
+    print('期货主力合约映射表下载完毕')
 
 
 def get_main_net_buy_amout():
@@ -237,7 +280,7 @@ def get_net_buy_rate():
 
 
 def update_adj_factor():
-    history_file = r'D:\pythoncode\IndexEnhancement\barra_cne6\download_from_juyuan\adjfactor.csv'
+    history_file = os.path.join(date_dair, 'download_from_juyuan', 'adjfactor.csv')
     dat_pd = pd.read_csv(history_file, engine='python')
     dat_pd = dat_pd.set_index(dat_pd.columns[0])
     dat_pd.columns = pd.to_datetime(dat_pd.columns)
@@ -364,7 +407,7 @@ def update_stock_daily_price():
     t_volume.index.name = 'Code'
     t_value.index.name = 'Code'
 
-    history_file = r'D:\pythoncode\IndexEnhancement\barra_cne6\download_from_juyuan'
+    history_file = os.path.join(date_dair, 'download_from_juyuan')
     data.save(openprice_pd, 'OpenPrice_daily.csv', save_path=history_file)
     data.save(highprice_pd, 'HighPrice_daily.csv', save_path=history_file)
     data.save(lowprice_pd, 'ClosePrice_daily.csv', save_path=history_file)
@@ -388,8 +431,8 @@ def update_pct_monthly():
     close_me = close_price[new_columns]
 
     pct_monthly_pd = close_me / close_me.shift(1, axis=1) - 1
-    basic_path = r'D:\pythoncode\IndexEnhancement\barra_cne6\download_from_juyuan'
-    pct_monthly_pd.to_csv(os.path.join(basic_path, 'ChangePCT_monthly.csv'), encoding='gbk')
+    history_file = os.path.join(date_dair, 'download_from_juyuan')
+    pct_monthly_pd.to_csv(os.path.join(history_file, 'ChangePCT_monthly.csv'), encoding='gbk')
 
 
 def update_daily_basic():
@@ -432,7 +475,7 @@ def update_daily_basic():
 
         sleep(0.33)
 
-    history_file = r'D:\pythoncode\IndexEnhancement\barra_cne6\download_from_juyuan'
+    history_file = os.path.join(date_dair, 'download_from_juyuan')
     data.save(pb_df, 'pb_daily.csv', save_path=history_file)
     data.save(pe_df, 'pe_daily.csv', save_path=history_file)
     data.save(negotiablemv_df, 'NegotiableMV_daily.csv', save_path=history_file)
@@ -444,7 +487,7 @@ def update_daily_basic():
 
 def compute_month_value():
     data = Data()
-    basic_path = r'D:\pythoncode\IndexEnhancement\barra_cne6\download_from_juyuan'
+    basic_path = os.path.join(date_dair, 'download_from_juyuan')
     months_ends = generate_months_ends()
 
     pb_daily = data.pb_daily
@@ -495,7 +538,7 @@ def update_future_price():
 if __name__ == '__main__':
 
     # compute_month_value()
-    update_stock_future_dat()
+    update_futmap()
 
     # update_adj_factor()
 
