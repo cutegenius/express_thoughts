@@ -1,15 +1,20 @@
-'''
-从wind数据库中提取数据，该文件主要提取上证综指的月度成分及权重。
-'''
 
 import pandas as pd
 import numpy as np
 from collections import defaultdict
-from barra_cne6.barra_template import Data
+from utility.tool0 import Data
+from utility.constant import date_dair
 import os
 from utility.constant import code_name_map_citic, code_name_map_sw, index_code_name_map
 from utility.relate_to_tushare import stocks_basis, trade_days, generate_months_ends
 from WindPy import *
+
+
+class StructWind:
+    def __init__(self, name, period, other=None):
+        self.name = name
+        self.period = period
+        self.other = other
 
 
 def update_stock_basic_inform():
@@ -59,7 +64,7 @@ def update_stock_basic_inform():
     res = pd.concat([dat_df[['SEC_NAME', 'ipo_date'.upper(), 'mkt'.upper(), 'sec_status'.upper(), 'delist_date'.upper()]],
                      res_df1, res_df2], axis=1)
     res.index.name = 'CODE'
-    save_path = r'D:\pythoncode\IndexEnhancement\barra_cne6\basic'
+    save_path = os.path.join(date_dair, 'basic')
     res.to_csv(os.path.join(save_path, 'stock_basic_inform.csv'), encoding='gbk')
 
     # test = res['中信三级行业'].drop_duplicates()
@@ -251,7 +256,7 @@ def update_index_data():
 
 def update_index_data_daily():
     w.start()
-    index_path = r'D:\pythoncode\IndexEnhancement\指数相关'
+    index_path = os.path.join(date_dair, 'index')
     name_map_dict = {'881001.WI': 'WindA',
                      '000300.SH': 'HS300',
                      '000016.SH': 'SZ50',
@@ -288,7 +293,7 @@ def update_index_data_daily():
 
 def update_index_data_monthly():
     w.start()
-    index_path = r'D:\pythoncode\IndexEnhancement\指数相关'
+    index_path = os.path.join(date_dair, 'index')
     name_map_dict = {'881001.WI': 'WindA',
                      '000300.SH': 'HS300',
                      '000016.SH': 'SZ50',
@@ -435,7 +440,7 @@ def update_monthly_macro_data():
 def update_industry_data():
     w.start()
     data = Data()
-    index_path = r'D:\pythoncode\IndexEnhancement\指数相关'
+    index_path = os.path.join(date_dair, 'index')
     try:
         indus_p = data.industry_price_monthly
         st = indus_p.index[-1] - timedelta(90)
@@ -465,18 +470,20 @@ def update_industry_data():
         indus_p.to_csv(os.path.join(index_path, 'industry_price_monthly.csv'), encoding='gbk')
 
 
-def update_f_data_from_wind():
-    path = r'D:\pythoncode\IndexEnhancement\barra_cne6\download_from_juyuan'
-    w.start()
+# w.wsd("000001.SZ", "west_netprofit_YOY", "2020-07-08", "2020-08-06", "Period=M")
 
+def update_f_data_from_wind(special_year=2020):
+    path = os.path.join(date_dair, 'download_from_juyuan')
+    w.start()
     data = Data()
     stock_basic_inform = data.stock_basic_inform
 
-    # m_list = w.tdays(tds, eds, "Days=Alldays;Period=Q", usedf=True)
-    # m_list = m_list[1]
-    # m_list = list(m_list[m_list.columns[0]])
-    iterms = ['rd_exp',              # 研发费用
+    mes = generate_months_ends()
+
+    iterms = [StructWind('rd_exp', 'Q', 'unit=1;rptType=1;Days=Alldays'),
+              StructWind('west_netprofit_YOY', 'M')
              ]
+
     codes_str = ''
     for i in stock_basic_inform.index:
         codes_str = codes_str + ',' + i
@@ -485,20 +492,42 @@ def update_f_data_from_wind():
     eds = datetime.today().strftime("%Y-%m-%d")
 
     for it in iterms:
+        name = it.name
+        period = it.period
+        other = it.other
         try:
-            tmp_df = eval('data.'+it)
-            tds = tmp_df.columns[-1]
+            tmp_df = eval('data.'+name)
+            tds = tmp_df.columns[-1].strftime("%Y-%m-%d")
         except Exception as e:
             tmp_df = pd.DataFrame()
-            tds = datetime(2009, 1, 1)
+            tds = datetime(2009, 1, 1).strftime("%Y-%m-%d")
 
-        if (datetime.today() - tds).days > 110:
-            res_tmp = w.wsd(codes_str, it, tds.strftime("%Y-%m-%d"), eds, "unit=1;rptType=1;Period=Q;Days=Alldays",
-                            usedf=True)
-            res_tmp1 = res_tmp[1]
-            res_tmp1 = res_tmp1.T
-            tmp_df = pd.concat([tmp_df, res_tmp1], axis=1)
-            data.save(tmp_df, it, save_path=path)
+        # "unit=1;rptType=1;Period=Q;Days=Alldays"
+        if other:
+            oth = 'Period=' + period + ';' + other
+        else:
+            oth = 'Period=' + period
+
+        if special_year:     # = 2019
+            mes0 = [m for m in mes if m.year == special_year]
+            tds = mes0[0].strftime("%Y-%m-%d")
+            eds = mes0[-1].strftime("%Y-%m-%d")
+
+        if not special_year and period == 'Q' and (datetime.today() - tds).days < 110:
+            continue
+        elif not special_year and period == 'M' and (datetime.today() - tds).days < 20:
+            continue
+
+        res_tmp = w.wsd(codes_str, name, tds, eds, oth,
+                        usedf=True)
+        res_tmp1 = res_tmp[1]
+        res_tmp1 = res_tmp1.T
+        tmp_df = pd.concat([tmp_df, res_tmp1], axis=1)
+        # 把columns排序
+        tt = list(tmp_df.columns)
+        tt.sort()
+        tmp_df = tmp_df[tt]
+        data.save(tmp_df, name, save_path=path)
 
 
 def update_index_wei():
@@ -534,13 +563,13 @@ def update_index_wei():
         to_add = pd.DataFrame({m: res['i_weight']})
         zz500_wt = pd.concat([zz500_wt, to_add], axis=1)
 
-    data.save(hs300_wt, 'hs300_wt', save_path=r'D:\pythoncode\IndexEnhancement\指数相关')
-    data.save(zz500_wt, 'zz500_wt', save_path=r'D:\pythoncode\IndexEnhancement\指数相关')
+    data.save(hs300_wt, 'hs300_wt', save_path=os.path.join(date_dair, 'index'))
+    data.save(zz500_wt, 'zz500_wt', save_path=os.path.join(date_dair, 'index'))
 
 
 if __name__ == '__main__':
 
-    update_index_data_monthly()
+    update_f_data_from_wind()
 
     # update_stock_basic_inform()
     # update_stock_expect_infor()
@@ -556,5 +585,6 @@ if __name__ == '__main__':
     # form_stock2_first_indus(panel_path, save_path)
     # form_stock2_second_indus(panel_path, save_path)
     # form_panel2matrix(panel_path, save_path)
+
 
 
