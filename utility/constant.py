@@ -5,6 +5,8 @@ import re
 root_dair = r'D:\Datebase_Stock'
 date_dair = r'D:\Datebase_Stock\Date'
 
+industry_benchmark = 'sw'
+
 # 工作目录，存放代码和因子基本信息
 work_dir = os.path.dirname(os.path.dirname(__file__))
 # 经过预处理后的因子截面数据存放目录
