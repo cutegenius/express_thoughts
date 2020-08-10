@@ -11,10 +11,10 @@ import pandas as pd
 import copy
 import pandas.tseries.offsets as toffsets
 from dask import dataframe as dd
+from utility.constant import date_dair
 warnings.filterwarnings('ignore')
 
-
-ROOT_PATH = r'D:\Datebase_Stock'
+ROOT_PATH = date_dair
 
 
 def ensure_time(x):
