@@ -3,7 +3,7 @@ import os
 import re
 
 root_dair = r'D:\Datebase_Stock'
-date_dair = r'D:\Datebase_Stock\Date'
+date_dair = r'D:\Datebase_Stock\Data'
 
 industry_benchmark = 'sw'
 
