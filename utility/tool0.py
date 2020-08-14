@@ -57,7 +57,7 @@ class Data:
             f_name = f_name.split('.')[0]
             if all(n.isnumeric() for n in f_name[-10:].split('-')):
                 f_name = f_name[:-11]
-        return f_name.lower()
+        return f_name   # f_name.lower()
 
     def _open_file(self, name, **kwargs):        
         path, file_name = self.pathmap[name]
@@ -156,10 +156,6 @@ class Data:
         return self.__dict__[name]
 
     def _get_fac_valid_name(self, name):
-        if name.upper() in self._ori_factors:
-            return name.upper()
-        if name.lower() in self._ori_factors:
-            return name.lower()
 
         if name not in self._ori_factors :
             i = 0
