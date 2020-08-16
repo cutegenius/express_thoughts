@@ -73,7 +73,7 @@ class Factor_Compute(CALFUNC):
         return pct_chg_nm
 
     @lazyproperty
-    def is_open(self):
+    def is_open1(self):
         open = self.openPrice_daily
         high = self.highprice_daily
         low = self.lowPrice_daily
@@ -197,7 +197,7 @@ class Factor_Compute(CALFUNC):
         return lncap
 
     @lazyproperty
-    def MIDCAP(self):
+    def MIDCAP_barra(self):
         lncap = np.log(self.negotiablemv_daily * 10000)
         lncap = CALFUNC.d_freq_to_m_freq(lncap)
         y = lncap ** 3
@@ -307,14 +307,14 @@ class Factor_Compute(CALFUNC):
             return res
 
         if self._status == 'update':
-            new_mes = self._get_update_month('REVERSE_20')
+            new_mes = self._get_update_month('M_REVERSE_20')
             # 若返回None，表示没有更新必要，因子计算函数同样返回None
             if not new_mes:
                 return None
 
-            reverse_20 = self.REVERSE_20
-            reverse_60 = self.REVERSE_60
-            reverse_180 = self.REVERSE_180
+            reverse_20 = self.M_REVERSE_20
+            reverse_60 = self.M_REVERSE_60
+            reverse_180 = self.M_REVERSE_180
 
         elif self._status == 'all':
             new_mes = [m for m in self._mes if m in value_per_deal.columns]
@@ -338,9 +338,9 @@ class Factor_Compute(CALFUNC):
         reverse_60 = CALFUNC.del_dat_early_than(reverse_60, START_YEAR)
         reverse_180 = CALFUNC.del_dat_early_than(reverse_180, START_YEAR)
 
-        res_dict = {"Reverse_20": reverse_20,
-                    "Reverse_60": reverse_60,
-                    "Reverse_180": reverse_180,
+        res_dict = {"M_reverse_20": reverse_20,
+                    "M_reverse_60": reverse_60,
+                    "M_reverse_180": reverse_180,
                     }
 
         return res_dict
