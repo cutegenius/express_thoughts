@@ -6,5 +6,5 @@
     root_dair = r'D:\Database_Stock'
     data_dair = r'D:\Database_Stock\Data'
 
-3、因子计算、因子预处理、因子检验已经可以更新完毕。后续持续更新中。
+3、因子计算、因子预处理、因子检验、子行业轮动模型已经可以更新完毕。后续持续更新中。
 
