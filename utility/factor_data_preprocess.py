@@ -12,8 +12,11 @@ from datetime import datetime
 from itertools import chain
 from functools import reduce
 from sklearn.linear_model import LinearRegression
-from utility.constant import info_cols
+from utility.constant import info_cols, data_dair
 from utility.relate_to_tushare import trade_days
+from utility.tool0 import Data
+import statsmodels.api as sm
+from pyfinance.utils import rolling_windows
 
 
 def align(df1, df2, *dfs):
@@ -37,60 +40,22 @@ def align(df1, df2, *dfs):
     return dfs_all
 
 
-def get_factor_data(datdf):
-    """
-    根据输入的因子名称将原始因子截面数据分割
-    """
+def drop_some(datdf):
     global info_cols
 
     cond = pd.Series(True, index=datdf.index)
-    for col in ['Is_open1', 'Mkt_cap_float']:
-        if pd.isnull(datdf[col]).all():
-            continue
-        else:
-            cond &= ~pd.isnull(datdf[col])
+    # 最新一期数据
+    if pd.isnull(datdf['Pct_chg_nm']).all():
+        pass
+    else:
+        # 删除未上市股票
+        cond &= ~pd.isnull(datdf['Mkt_cap_float'])
+        # 删除未开盘股票
+        cond &= datdf['Is_open1']
 
     datdf = datdf.loc[cond]
 
-    return datdf, pd.DataFrame()
-
-    # # 对截面数据中，基准信息列存在空缺的股票（行）进行删除处理
-    # # 选出市值因子不为空的
-    # tmp_info_cols = [inf for inf in info_cols if inf in datdf.columns]
-    # try:
-    #     cond = ~pd.isnull(datdf['Mkt_cap_float'])
-    # except Exception as e:
-    #     print('debug')
-    #
-    # datdf = datdf.loc[cond]
-    #
-    # # 逻辑问题，不能因为一些因子就把这个股票给删掉
-    # # ['Mkt_cap_float', 'Is_open1']
-    # for col in tmp_info_cols:
-    #     if col in ['Is_open1', 'Mkt_cap_float', 'Pct_chg_nm']:  # todo 因子命名问题，后续统一一下
-    #         # 是否全为 空值， 最后一个月
-    #         if pd.isnull(datdf[col]).all():
-    #             continue
-    #     # 逐列 非空 判断， 并逐列求 逻辑and 运算，确保datfd中 info_cols 里面的列名都在。
-    #     if col != 'Mkt_cap_float':
-    #         try:
-    #             # print(col)
-    #             cond &= ~pd.isnull(datdf[col])
-    #         except Exception as e:
-    #             print('debug')
-    # datdf = datdf.loc[cond]
-
-    # 将原截面数据按照预处理与否分别划分，返回需处理和不需处理2个因子截面数据
-    # if names is None:
-    #     return datdf, pd.DataFrame()
-    # else:
-    #     dat_to_process = datdf.iloc[:, idx]
-    #     dat_to_process = pd.merge(datdf[tmp_info_cols], dat_to_process,
-    #                               left_index=True, right_index=True)
-    #     # 使用set创建两个不重复元素集，想减，得到剩余的元素集合，然后通过sorted转为列。
-    #     unchanged_cols = sorted(set(datdf.columns) - set(dat_to_process.columns))
-    #     dat_unchanged = datdf[unchanged_cols]
-    # return dat_to_process, dat_unchanged
+    return datdf
 
 
 def fill_na(data, ind='sw', fill_type='any'):
@@ -378,6 +343,10 @@ def get_monthends_series(dt):
 def simple_func(pd_s, mv, type='median'):
     # 市值加权
     if type == 'mv_weighted':
+        tmpp = pd.concat([pd_s, mv], axis=1)
+        tmpp = tmpp.dropna(axis=0)
+        pd_s = tmpp[tmpp.columns[0]]
+        mv = tmpp[tmpp.columns[1]]
         mv_weights = mv/np.sum(mv)
         v = np.dot(np.mat(pd_s), np.mat(mv_weights).T)
         return np.array(v).flatten()
@@ -452,75 +421,6 @@ def concat_factor_2(data_path, save_path, classified_df, factor_name, wei_type, 
     # prod_total_df.to_csv(os.path.join(save_path, '累计_'+save_name), encoding='gbk')
 
 
-# 行业因子合成
-def concat_indus_factor(data_path, indus_save_path, compose_way):
-
-    # 创建文件夹
-    if not os.path.exists(os.path.join(indus_save_path)):
-        os.makedirs(os.path.join(indus_save_path))
-
-    fls = os.listdir(data_path)
-    processed_list = os.listdir(indus_save_path)
-    to_process_f = [f for f in fls if f not in processed_list]
-
-    if len(to_process_f) == 0:
-        print('无需要处理的数据')
-        return None
-
-    # 读取行业信息
-    # path = r'D:\pythoncode\IndexEnhancement\barra_cne6\basic\industry_citic.csv'
-    # industry_df = pd.read_csv(path, encoding='gbk')
-    # industry_df.set_index('CODE', inplace=True)
-
-    for panel_f in to_process_f:
-        print(panel_f)
-        # panel_f = os.listdir(date_path)[0]
-        panel_dat = pd.read_csv(os.path.join(data_path, panel_f),
-                                encoding='gbk', engine='python',
-                                index_col=['Code'])
-
-        # 需要先对股票因子做两个常规处理
-        data_to_process, data_unchanged = get_factor_data(panel_dat)
-        # data_to_process.empty
-        data_to_process = winsorize(data_to_process)
-
-        factors_to_concat = list((set(panel_dat.columns) - (set(info_cols) - set(['Pct_chg_nm']))))
-        grouped = data_to_process.groupby('Second_industry')
-
-        ind_factor = pd.DataFrame()
-        for name, group in grouped:
-            # 选择对应的目标因子
-            factor_dat = group[factors_to_concat]
-            mv = group['Mkt_cap_float']
-            factor_dat = factor_dat.applymap(apply_func2)
-            factor_concated = {}
-            for factor_name, factors in factor_dat.iteritems():
-                if factor_name == 'Lncap_barra':
-                    tmp_f = np.log(np.sum(group['Mkt_cap_float']))
-                    factor_concated.update({factor_name: tmp_f})
-                    continue
-
-                # 不同类型因子有不同的合成方式
-                factor_concat_way = 'mv_weighted'
-                for concat_way, factorlist in compose_way.items():
-                    factorlist_tmp = [fa.lower() for fa in factorlist]
-                    if factor_name.lower() in factorlist_tmp:
-                        factor_concat_way = concat_way
-                tmp_f = simple_func(factors, mv=group['Mkt_cap_float'], type=factor_concat_way)
-
-                factor_concated.update({factor_name: tmp_f})
-
-            factor_concated = pd.DataFrame(factor_concated)
-            factor_concated.index = [name]
-            factor_concated.loc[name, 'Mkt_cap_float'] = np.sum(mv)                   # 市值采用行业市值和
-            if 'Industry_zx' in group.columns:
-                factor_concated.loc[name, 'Industry_zx'] = group.loc[group.index[0], 'Industry_zx']
-            if 'Industry_sw' in group.columns:
-                factor_concated.loc[name, 'Industry_sw'] = group.loc[group.index[0], 'Industry_sw']
-            ind_factor = pd.concat([ind_factor, factor_concated], axis=0)
-
-        ind_factor.index.name = 'Name'
-        ind_factor.to_csv(os.path.join(indus_save_path, panel_f), encoding='gbk')
 
 
 # 把一个 截面数据添加到已经有的月度模式存储的文件中
@@ -580,29 +480,7 @@ def add_to_panels(dat, panel_path, f_name, freq_in_dat='M'):
     print('完毕！')
 
 
-def adjust_months(d_df):
 
-    if isinstance(d_df.columns[0], str):
-        new_cols = [datetime.strptime(col, "%Y-%m-%d") for col in d_df.columns]
-        d_df.columns = new_cols
-
-    # 删除12月份的数据
-    tdc = [col for col in d_df.columns if col.month == 12]
-    d_df = d_df.drop(tdc, axis=1)
-
-    # 把公告月份调整为实际月份
-    new_cols = []
-    for col in d_df.columns:
-        if col.month == 3:
-            new_cols.append(datetime(col.year, 4, 30))
-        if col.month == 6:
-            new_cols.append(datetime(col.year, 8, 31))
-        if col.month == 9:
-            new_cols.append(datetime(col.year, 10, 31))
-
-    d_df.columns = new_cols
-
-    return d_df
 
 
 # 从一个月度panel里面删除某个因子
@@ -625,88 +503,79 @@ def del_factor_from_panel(panel_path, factor_name):
     return
 
 
-# 根据 months_end 的列拓展 d_df。
-# 我从数据库中下载的基本面数据是调整过日期的，但是调整到的是月度的最后一个自然日，要改成月度最后一个交易日，
-# 同时还有复制到其他月份中。
-def append_df(d_df, target_feq='M', fill_type='preceding'):
-    '''
-    fill_type ：若整列和为0的填充方式，preceding表示使用前值填充,  empty表示不填充
-    '''
-
-    tds = trade_days()
-
-    # 得到月末日期列表
-    months_end = []
-    for i in range(1, len(tds)):
-        if tds[i].month != tds[i - 1].month:
-            months_end.append(tds[i - 1])
-        elif i == len(tds) - 1:
-            months_end.append(tds[i])
+def rolling_regress_1(y, x, window=5):
     try:
-        months_end = [me for me in months_end if me.year >= d_df.columns[0].year]
+        rolling_ys = rolling_windows(y, window)
+        rolling_xs = rolling_windows(x, window)
     except Exception as e:
         print('debug')
 
-    # 赵到对应的月末日期列表，可能年月同日不同的情况
-    new_col = []
-    for col in d_df.columns:
-        for me in months_end:
-            if col.year == me.year and col.month == me.month:
-                new_col.append(me)
-    # 改变月末日期
-    d_df.columns = new_col
+    bet = pd.Series()
+    # enumerate 形成带 i 的一个迭代器
+    for i, (rolling_x, rolling_y) in enumerate(zip(rolling_xs, rolling_ys)):
+        tmp_index = y.index[i + window - 1]
+        try:
+            model = sm.OLS(rolling_y, rolling_x)
+            result = model.fit()
+            params = result.params
+            b_v = params[0]
+            # print(result.params)
+            # print(result.summary())
+        except:
+            print(i)
+            raise
 
-    if target_feq.upper() == 'M':
-        # 设一个日期全的，单值为空的df
-        res = pd.DataFrame(index=d_df.index, columns=months_end)
-        # 给定日期赋值
-        res[d_df.columns] = d_df
+        b = pd.Series(index=[tmp_index], data=b_v)
+        bet = pd.concat([bet, b])
 
-    elif target_feq.upper() == 'D':
-        new_columns = [d for d in tds if d >= d_df.columns[0]]
-        res = pd.DataFrame(index=d_df.index, columns=new_columns)
-        # 给定日期赋值
-        res[d_df.columns] = d_df
+    return bet
 
-    elif target_feq.upper() == 'W':
-        week_ends = trade_days('w')
-        # 因为 月末交易日数据（A） 与 一周交易日数据最后一天(B) 不是一一对应也不是B包含A的关系，所以要做一个A与相对应的B的映射
-        res = pd.DataFrame(index=d_df.index, columns=week_ends)
-        selected_cols = []
-        for col, se in d_df.iteritems():
-            delta = [we - col for we in week_ends if (we - col).days >= 0]
-            selected_cols.append(col + np.min(delta))
-        # 给定日期赋值
-        res[selected_cols] = d_df
 
-    # 首期赋值为None
-    if res.iloc[:, 0].sum() == 0:
-        res.iloc[:, 0] = np.nan
+# 计算不同股指合约的beta值
+def compute_future_beta():
+    # 存储地址为：D:\Datebase_Stock\Date\index\stock_future\sf_beta.csv
+    data = Data()
+    sf_close_daily = data.sf_close_daily
+    index_price_daily = data.index_price_daily.T
 
-    # 若当列为空，则当列数值与前列相同
-    if fill_type == 'preceding':
-        res_ar = np.array(res)
-        [h, l] = res_ar.shape
-        for i in range(1, l):
-            for j in range(0, h):
-                if np.isnan(res_ar[j, i]) and not np.isnan(res_ar[j, i-1]):
-                    res_ar[j, i] = res_ar[j, i-1]
+    # 求一下日期的交集，避免日期不同的潜在问题
+    tt = list(set(sf_close_daily.columns) & set(index_price_daily.index))
+    tt.sort()
 
-        res_df = pd.DataFrame(data=res_ar, index=res.index, columns=res.columns)
+    sf_close_daily = sf_close_daily[tt]
+    index_price_daily = index_price_daily.loc[tt, :]
 
-    # 删除nan
-    res_df.dropna(axis=1, how='all', inplace=True)
-    res_df.dropna(axis=0, how='all', inplace=True)
-    res_df.sum()
+    sf_beta = pd.DataFrame()
+    for c, se in sf_close_daily.iterrows():
+        if 'IC' in c:
+            tmp_i = index_price_daily['ZZ500']
+        elif 'IF' in c:
+            tmp_i = index_price_daily['HS300']
+        elif 'IH' in c:
+            tmp_i = index_price_daily['SZ50']
+        else:
+            print('Code Bug')
+            raise ValueError
 
-    return res_df
+        # 去掉Nan
+        tmp_c = se.dropna()
+        tmp_i = tmp_i[tmp_c.index]
+        if len(tmp_c) > 22:
+            bet = rolling_regress_1(tmp_i, tmp_c, window=22)
+            sf_beta = pd.concat([sf_beta, pd.DataFrame({c: bet}).T], axis=0)
+
+    p = os.path.join(data_dair, 'index', 'stock_future')
+    data.save(sf_beta, 'sf_beta', p)
+
 
 if __name__ == "__main__":
 
-    panel_path = r"D:\pythoncode\IndexEnhancement\因子预处理模块\因子"
-    factor_name_list = ['Totaloperatingrevenueps_qoq_qoq']
-    for f in factor_name_list:
-        del_factor_from_panel(panel_path, f)
+    compute_future_beta()
+
+    # panel_path = r"D:\pythoncode\IndexEnhancement\因子预处理模块\因子"
+    # factor_name_list = ['Totaloperatingrevenueps_qoq_qoq']
+    # for f in factor_name_list:
+    #     del_factor_from_panel(panel_path, f)
 
     # panel_path = r'D:\pythoncode\IndexEnhancement\因子预处理模块\因子'
     # add_fs_path = r'D:\pythoncode\IndexEnhancement\因子预处理模块\增加的因子\截面数据'
