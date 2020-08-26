@@ -10,11 +10,12 @@ from datetime import datetime, timedelta
 # from pyfinance.ols import PandasRollingOLS as rolling_ols
 from pyfinance.utils import rolling_windows
 from utility.tool0 import Data, scaler
-from utility.factor_data_preprocess import adjust_months, add_to_panels, align, append_df
+from utility.factor_data_preprocess import add_to_panels, align
 from utility.relate_to_tushare import generate_months_ends
 from utility.tool1 import CALFUNC, _calculate_su_simple, parallelcal,  lazyproperty, time_decorator, \
     get_signal_season_value, get_fill_vals, linear_interpolate, get_season_mean_value
-
+from utility.constant import data_dair, root_dair
+from utility.tool3 import adjust_months, add_to_panels, append_df
 
 START_YEAR = 2009
 
@@ -73,7 +74,7 @@ class Factor_Compute(CALFUNC):
         return pct_chg_nm
 
     @lazyproperty
-    def is_open(self):
+    def is_open1(self):
         open = self.openPrice_daily
         high = self.highprice_daily
         low = self.lowPrice_daily
@@ -163,6 +164,11 @@ class Factor_Compute(CALFUNC):
         return res_dict
 
     @lazyproperty
+    def west_netprofit_yoy(self):
+        west = self.west_netprofit_YOY
+        return west
+
+    @lazyproperty
     def beta(self):
 
         y = self.changepct_daily.T / 100
@@ -197,7 +203,7 @@ class Factor_Compute(CALFUNC):
         return lncap
 
     @lazyproperty
-    def MIDCAP(self):
+    def MIDCAP_barra(self):
         lncap = np.log(self.negotiablemv_daily * 10000)
         lncap = CALFUNC.d_freq_to_m_freq(lncap)
         y = lncap ** 3
@@ -270,6 +276,15 @@ class Factor_Compute(CALFUNC):
         return res_dict
 
     @lazyproperty
+    def mgmt_ben_top3m(self):
+        mgmt_ben_top3m = self.stmnote_mgmt_ben_top3m
+        mgmt_ben_top3m = np.log(mgmt_ben_top3m)
+        mgmt_ben_top3m = adjust_months(mgmt_ben_top3m, orig='Y')
+        mgmt_ben_top3m = append_df(mgmt_ben_top3m)
+
+        return mgmt_ben_top3m
+
+    @lazyproperty
     def reverse_nm(self):
         '''
         1）在每个月底，对于股票s，回溯其过去N个交易日的数据（为方便处理， N取偶数）；
@@ -307,14 +322,14 @@ class Factor_Compute(CALFUNC):
             return res
 
         if self._status == 'update':
-            new_mes = self._get_update_month('REVERSE_20')
+            new_mes = self._get_update_month('M_REVERSE_20')
             # 若返回None，表示没有更新必要，因子计算函数同样返回None
             if not new_mes:
                 return None
 
-            reverse_20 = self.REVERSE_20
-            reverse_60 = self.REVERSE_60
-            reverse_180 = self.REVERSE_180
+            reverse_20 = self.M_REVERSE_20
+            reverse_60 = self.M_REVERSE_60
+            reverse_180 = self.M_REVERSE_180
 
         elif self._status == 'all':
             new_mes = [m for m in self._mes if m in value_per_deal.columns]
@@ -338,9 +353,9 @@ class Factor_Compute(CALFUNC):
         reverse_60 = CALFUNC.del_dat_early_than(reverse_60, START_YEAR)
         reverse_180 = CALFUNC.del_dat_early_than(reverse_180, START_YEAR)
 
-        res_dict = {"Reverse_20": reverse_20,
-                    "Reverse_60": reverse_60,
-                    "Reverse_180": reverse_180,
+        res_dict = {"M_reverse_20": reverse_20,
+                    "M_reverse_60": reverse_60,
+                    "M_reverse_180": reverse_180,
                     }
 
         return res_dict
@@ -673,15 +688,37 @@ class Factor_Compute(CALFUNC):
             d = all_codes[i]
             row[row.index[row.index < d + timedelta(200)]] = np.nan
 
-        ext_120 = close_price/close_price.shift(periods=120, axis=1)
-        ext_120.dropna(how='all', axis=1, inplace=True)
-        rps_120 = ext_120.apply(scaler, scaler_max=100, scaler_min=1)
+        if self._status == 'all':
+            ext_120 = close_price/close_price.shift(periods=120, axis=1)
+            ext_120.dropna(how='all', axis=1, inplace=True)
+            rps_120 = ext_120.apply(scaler, scaler_max=100, scaler_min=1)
 
-        rps = rps_120
-        rps.dropna(how='all', axis=1, inplace=True)
-        res = rps.apply(scaler, scaler_max=100, scaler_min=1)
+            rps = rps_120
+            rps.dropna(how='all', axis=1, inplace=True)
+            res = rps.apply(scaler, scaler_max=100, scaler_min=1)
 
-        res = CALFUNC.del_dat_early_than(res, START_YEAR)
+            res = CALFUNC.del_dat_early_than(res, START_YEAR)
+        elif self._status == 'update':
+            hased_rps = data.RPS
+            to_update = [col for col in close_price.columns if col not in hased_rps.columns and col > hased_rps.columns[-1]]
+            if len(to_update) == 0:
+                print('RPS无需要更新的部分')
+                return hased_rps
+
+            st = to_update[0]
+            st_loc = np.where(close_price.columns == st)[0][0]
+            st_loc = st_loc - 121
+
+            close_price_new = close_price.iloc[:, st_loc:]
+            ext_120 = close_price_new / close_price_new.shift(periods=120, axis=1)
+            ext_120.dropna(how='all', axis=1, inplace=True)
+            rps_120 = ext_120.apply(scaler, scaler_max=100, scaler_min=1)
+            rps_120.dropna(how='all', axis=1, inplace=True)
+            res0 = rps_120.apply(scaler, scaler_max=100, scaler_min=1)
+
+            hased_rps[res0.columns] = res0
+            res = hased_rps
+
         return res
 
     # 研发支出占营业收入的比例，因研发支出数据是在2018年3季度以后才开始披露的，所以该数据是在2018年3季度以后才有
@@ -703,35 +740,44 @@ class Factor_Compute(CALFUNC):
 
         return res
 
-    # @lazyproperty
-    # def Rps_by_industry(self):
-    #     data = Data()
-    #     rps = data.RPS
-    #     industry = data.stock_basic_inform
-    #     industry = industry['申万一级行业']
-    #     industry.dropna(inplace=True)
-    #
-    #     t_del = [i for i in industry.index if i not in rps.index]
-    #     industry = industry.drop(t_del)
-    #
-    #     t_del = [i for i in rps.index if i not in industry.index]
-    #     rps = rps.drop(t_del, axis=0)
-    #
-    #     res = pd.DataFrame()
-    #     for col in rps.columns:
-    #         rps_tmp = rps[col]
-    #         tmp_pd = pd.DataFrame({'rps': rps_tmp, 'industry': industry})
-    #         grouped = tmp_pd.groupby('industry')
-    #
-    #         rps_section = pd.DataFrame()
-    #         for i, v_df in grouped:
-    #             se = scaler(v_df['rps'], 100, 1)
-    #             dat = pd.DataFrame({col: se})
-    #             rps_section = pd.concat([rps_section, dat], axis=0)
-    #
-    #         res = pd.concat([res, rps_section], axis=1)
-    #
-    #     return res
+    @lazyproperty
+    def Rps_by_industry(self):
+        data = Data()
+        rps = data.RPS
+        industry = data.stock_basic_inform
+        industry = industry['申万一级行业']
+        industry.dropna(inplace=True)
+
+        t_del = [i for i in industry.index if i not in rps.index]
+        industry = industry.drop(t_del)
+        t_del = [i for i in rps.index if i not in industry.index]
+        rps = rps.drop(t_del, axis=0)
+
+        if self._status == 'all':
+            new_mes = list(rps.columns)
+            res = pd.DataFrame()
+        elif self._status == 'update':
+            hased_rps_ind = data.RPS_BY_INDUSTRY
+            new_mes = [col for col in rps.columns if col not in hased_rps_ind.columns]
+            res = pd.DataFrame()
+
+        for col in new_mes:
+            rps_tmp = rps[col]
+            tmp_pd = pd.DataFrame({'rps': rps_tmp, 'industry': industry})
+            grouped = tmp_pd.groupby('industry')
+
+            rps_section = pd.DataFrame()
+            for i, v_df in grouped:
+                se = scaler(v_df['rps'], 100, 1)
+                dat = pd.DataFrame({col: se})
+                rps_section = pd.concat([rps_section, dat], axis=0)
+
+            res = pd.concat([res, rps_section], axis=1)
+
+        if self._status == 'update':
+            res = pd.concat([hased_rps_ind, res], axis=1)
+
+        return res
 
 
 def compute_factor(status):
@@ -761,13 +807,19 @@ def compute_factor(status):
 if __name__ == "__main__":
     # compute_factor('all')
 
+    # 'all'  'update'
     # 测试某个因子
     fc = Factor_Compute('update')
-    res = fc.compute_pct_chg_nm
-    res = fc.peg
-    # fc.save(res, 'is_open'.upper())
-    # panel_path = r'D:\pythoncode\IndexEnhancement\因子预处理模块\因子'
-    # add_to_panels(res, panel_path, 'Peg', freq_in_dat='M')
+    res = fc.mgmt_ben_top3m
+    fc.save(res, 'mgmt_ben_top3m'.upper())
 
+    # res = fc.Rps
+    # fc.save(res, 'Rps'.upper())
+    # res = fc.Rps_by_industry
+    # fc.save(res, 'Rps_by_industry'.upper())
+    # panel_path = os.path.join(root_dair, '因子预处理模块', '因子')
+    # add_to_panels(res, panel_path, 'Rps_by_industry', freq_in_dat='M')
     # grossprofitmargin_q
     # grossprofitmargin_q_diff
+
+

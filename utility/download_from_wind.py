@@ -1,9 +1,12 @@
+'''
+从wind数据库中提取数据，该文件主要提取上证综指的月度成分及权重。
+'''
 
 import pandas as pd
 import numpy as np
 from collections import defaultdict
 from utility.tool0 import Data
-from utility.constant import date_dair
+from utility.constant import data_dair
 import os
 from utility.constant import code_name_map_citic, code_name_map_sw, index_code_name_map
 from utility.relate_to_tushare import stocks_basis, trade_days, generate_months_ends
@@ -256,7 +259,7 @@ def update_index_data():
 
 def update_index_data_daily():
     w.start()
-    index_path = os.path.join(date_dair, 'index')
+    index_path = os.path.join(data_dair, 'index')
     name_map_dict = {'881001.WI': 'WindA',
                      '000300.SH': 'HS300',
                      '000016.SH': 'SZ50',
@@ -293,7 +296,7 @@ def update_index_data_daily():
 
 def update_index_data_monthly():
     w.start()
-    index_path = os.path.join(date_dair, 'index')
+    index_path = os.path.join(data_dair, 'index')
     name_map_dict = {'881001.WI': 'WindA',
                      '000300.SH': 'HS300',
                      '000016.SH': 'SZ50',
@@ -440,7 +443,7 @@ def update_monthly_macro_data():
 def update_industry_data():
     w.start()
     data = Data()
-    index_path = os.path.join(date_dair, 'index')
+    index_path = os.path.join(data_dair, 'index')
     try:
         indus_p = data.industry_price_monthly
         st = indus_p.index[-1] - timedelta(90)
@@ -472,15 +475,15 @@ def update_industry_data():
 
 # w.wsd("000001.SZ", "west_netprofit_YOY", "2020-07-08", "2020-08-06", "Period=M")
 
-def update_f_data_from_wind(special_year=2020):
-    path = os.path.join(date_dair, 'download_from_juyuan')
+def update_f_data_from_wind(special_year=2015):
+    path = os.path.join(data_dair, 'download_from_juyuan')
     w.start()
     data = Data()
     stock_basic_inform = data.stock_basic_inform
 
     mes = generate_months_ends()
 
-    iterms = [StructWind('rd_exp', 'Q', 'unit=1;rptType=1;Days=Alldays'),
+    iterms = [# StructWind('rd_exp', 'Q', 'unit=1;rptType=1;Days=Alldays'),
               StructWind('west_netprofit_YOY', 'M')
              ]
 
@@ -496,7 +499,7 @@ def update_f_data_from_wind(special_year=2020):
         period = it.period
         other = it.other
         try:
-            tmp_df = eval('data.'+name)
+            tmp_df = eval('data.'+name.lower())
             tds = tmp_df.columns[-1].strftime("%Y-%m-%d")
         except Exception as e:
             tmp_df = pd.DataFrame()
@@ -523,11 +526,13 @@ def update_f_data_from_wind(special_year=2020):
         res_tmp1 = res_tmp[1]
         res_tmp1 = res_tmp1.T
         tmp_df = pd.concat([tmp_df, res_tmp1], axis=1)
+        # 读取本地数据时和Wind提取数据时的时间格式可能不一样，统一一下才能排序
+        tmp_df.columns = pd.to_datetime(tmp_df.columns)
         # 把columns排序
         tt = list(tmp_df.columns)
         tt.sort()
         tmp_df = tmp_df[tt]
-        data.save(tmp_df, name, save_path=path)
+        data.save(tmp_df, name.lower(), save_path=path)
 
 
 def update_index_wei():
@@ -563,8 +568,8 @@ def update_index_wei():
         to_add = pd.DataFrame({m: res['i_weight']})
         zz500_wt = pd.concat([zz500_wt, to_add], axis=1)
 
-    data.save(hs300_wt, 'hs300_wt', save_path=os.path.join(date_dair, 'index'))
-    data.save(zz500_wt, 'zz500_wt', save_path=os.path.join(date_dair, 'index'))
+    data.save(hs300_wt, 'hs300_wt', save_path=os.path.join(data_dair, 'index'))
+    data.save(zz500_wt, 'zz500_wt', save_path=os.path.join(data_dair, 'index'))
 
 
 if __name__ == '__main__':
@@ -585,6 +590,5 @@ if __name__ == '__main__':
     # form_stock2_first_indus(panel_path, save_path)
     # form_stock2_second_indus(panel_path, save_path)
     # form_panel2matrix(panel_path, save_path)
-
 
 

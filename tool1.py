@@ -21,7 +21,7 @@ from dask.multiprocessing import get
 # from pyfinance.ols import PandasRollingOLS as rolling_ols
 from pyfinance.utils import rolling_windows
 from utility.tool0 import Data
-from utility.factor_data_preprocess import adjust_months, add_to_panels, align, append_df
+from utility.tool3 import adjust_months, add_to_panels, append_df
 from utility.relate_to_tushare import generate_months_ends
 
 warnings.filterwarnings('ignore')
@@ -504,29 +504,6 @@ class CALFUNC(Data):
         datdf = self.clean_data(datdf)
         datdf = datdf.shift(shift)
         return datdf
-
-    # 对传入的df进行处理，如果传入的都是是多列的数据，确保他们有相同的股票代码和日期，如果有一个是单列数据，确保他们有相同的日期
-    def _align(self, df1, df2, *dfs):
-        # chain 是把多个迭代器合成一个迭代器
-        dfs_all = [self.clean_data(df) for df in chain([df1, df2], dfs)]
-        # 看df1和df2是否有单个列的
-        if any(len(df.shape) == 1 or 1 in df.shape for df in dfs_all):
-            dims = 1
-        else:
-            dims = 2
-        # 对日期求交期. reduce: 用传给reduce中的函数function（有两个参数）先对集合中的第 1、2个元素进行操作，
-        # 得到的结果再与第三个数据用function函数运算，最后得到一个结果。
-        mut_date_range = sorted(reduce(lambda x, y: x.intersection(y), (df.index for df in dfs_all)))
-        # 对columns求交集
-        mut_codes = sorted(reduce(lambda x, y: x.intersection(y), (df.columns for df in dfs_all)))
-        # 如果df1和df2都是多维的，求日期和代码的交集；否则，只求日期的交集
-        if dims == 2:
-            dfs_all = [df.loc[mut_date_range, mut_codes] for df in dfs_all]
-        elif dims == 1:
-            dfs_all = [df.loc[mut_date_range, :] for df in dfs_all]
-        return dfs_all
-
-        # tt = [df for df in chain([df1, df2], dfs)]
 
     def mv_weighted_ret(self, negotiablemv, change_pct):
         return change_pct*negotiablemv/negotiablemv.sum()

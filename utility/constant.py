@@ -1,11 +1,47 @@
-# from utility.single_factor_test import get_industry   # 不能从signal_factor_test导入，会引起相互引用问题
 import os
 import re
+from copy import deepcopy
 
-root_dair = r'D:\Datebase_Stock'
-date_dair = r'D:\Datebase_Stock\Date'
+root_dair = r'D:\Database_Stock'
+data_dair = r'D:\Database_Stock\Data'
 
 industry_benchmark = 'sw'
+
+# 用来选择行业的因子
+industry_factor_names = ['Return_6m', 'Return_12m', 'Roa_ttm', 'Roe_q', 'Profitmargin_q',
+                         'Profit_g_q', 'Roe_g_q', 'Sales_g_q', 'Sue']
+
+# 不同行业用来打分的大类因子
+factor_dict_for_scores = {
+          # '建筑材料': ['quality', 'growth', 'grossrate', 'west'],
+          'default': ['quality', 'growth'],  #, 'west'],
+          }
+
+# 默认的大类因子及其二级因子
+default_dict = {'mom': ['Return_12m', 'Return_1m', 'Return_3m', 'Return_6m'],
+                'quality': ['Roa_q', 'Roe_q'],
+                'value': ['Ep'],
+                'growth': ['Profit_g_q', 'Sales_g_q', 'Roe_g_q'],
+                'size': ['Lncap_barra'],
+                'liquidity': ['Stom_barra', 'Stoq_barra', 'Stoa_barra'],
+                'volatility': ['Std_1m', 'Std_3m', 'Std_6m', 'Std_12m'],
+                # 'west': ['West_netprofit_yoy'],
+                }
+
+# 不同行业的需要合成的大类因子，在默认分类的基础上，通过对默认分类的添加，来得到不同行业的大类合成因子
+factor_dict_to_concate = {
+               'default': default_dict
+                }
+
+added_dict = {
+               # '建筑材料': {'grossrate': ['Grossprofitmargin_diff', 'Totalassetturnover']}
+             }
+for key, value in added_dict.items():
+    tmp_d = deepcopy(default_dict)
+    for k, v in value.items():
+        tmp_d.update({k: v})
+    factor_dict_to_concate.update({key: tmp_d})
+
 
 # 工作目录，存放代码和因子基本信息
 work_dir = os.path.dirname(os.path.dirname(__file__))
@@ -42,7 +78,7 @@ if not os.path.exists(total_result_path):
     os.makedirs(total_result_path)
 
 
-tds_interface = 'Wind'      # or 'tushare'
+tds_interface = 'tushare'  # 'Wind' or 'tushare'
 
 old_info_cols = ['No', 'code', 'name', 'Name', 'ipo_date', 'industry_zx', 'industry_zz', 'mkt', 'index',
                  'industry_sw', 'MKT_CAP_FLOAT', '中信三级行业', '中信一级行业', '中信二级行业',
