@@ -8,27 +8,34 @@ import pandas as pd
 from utility.relate_to_tushare import trade_days
 
 
-def adjust_months(d_df):
+# 调整财报数据日期到披露日期
+def adjust_months(d_df, orig='Q'):
 
     if isinstance(d_df.columns[0], str):
         new_cols = [datetime.strptime(col, "%Y-%m-%d") for col in d_df.columns]
         d_df.columns = new_cols
 
-    # 删除12月份的数据
-    tdc = [col for col in d_df.columns if col.month == 12]
-    d_df = d_df.drop(tdc, axis=1)
+    # 原始数据为季度数据
+    if orig == 'Q':
+        # 删除12月份的数据
+        tdc = [col for col in d_df.columns if col.month == 12]
+        d_df = d_df.drop(tdc, axis=1)
 
-    # 把公告月份调整为实际月份
-    new_cols = []
-    for col in d_df.columns:
-        if col.month == 3:
-            new_cols.append(datetime(col.year, 4, 30))
-        if col.month == 6:
-            new_cols.append(datetime(col.year, 8, 31))
-        if col.month == 9:
-            new_cols.append(datetime(col.year, 10, 31))
+        # 把公告月份调整为实际月份
+        new_cols = []
+        for col in d_df.columns:
+            if col.month == 3:
+                new_cols.append(datetime(col.year, 4, 30))
+            if col.month == 6:
+                new_cols.append(datetime(col.year, 8, 31))
+            if col.month == 9:
+                new_cols.append(datetime(col.year, 10, 31))
 
-    d_df.columns = new_cols
+        d_df.columns = new_cols
+    # 原始数据为年度数据
+    elif orig == 'Y':
+        new_cols = [datetime(col.year + 1, 4, 30) for col in d_df.columns]
+        d_df.columns = new_cols
 
     return d_df
 
