@@ -1,12 +1,11 @@
-import os
 import warnings
 import calendar
+import os
 import numpy as np
 import pandas as pd
 import re
 from datetime import datetime, time
 from utility.tool0 import Data
-from utility.constant import root_dair, data_dair
 
 
 class lazyproperty:
@@ -132,8 +131,8 @@ class Factor_Update:
     def get_basic_data(self, date):
         # code, name, ipo_date, industry_sw, MKT_CAP_FLOAT, is_open1, PCT_CHG_NM
         stock_basic = self.data.stock_basic_inform
-        mkt_cap_float = self.data.MKT_CAP_FLOAT * 10000
-        pct_chg_nm = self.data.PCT_CHG_NM / 100
+        mkt_cap_float = self.data.mkt_cap_float * 10000
+        pct_chg_nm = self.data.pct_chg_nm / 100
         res = stock_basic[['SEC_NAME', 'MKT', 'IPO_DATE', '中信一级行业', '申万一级行业', '申万二级行业']]
 
         res = self.concat_df(res, pd.DataFrame({'MKT_CAP_FLOAT': mkt_cap_float[date]}))
@@ -194,18 +193,18 @@ def history_factor_rename():
 
 # 生成新的月度因子表格
 def generate_new_factor_table():
-    save_path = r'D:\Datebase_Stock\因子预处理模块\因子'
-    factor_path = r'D:\Datebase_Stock\factor_data'
+    save_path = r'D:\文档\OneDrive\earning money\因子库维护\Date\factor_data_monthly'
+    factor_path = r'D:\文档\OneDrive\earning money\因子库维护\Date\factor_data'
 
     # 最后
     # latest_date = get_latest_updated_date()
 
     z = Factor_Update(save_path=save_path, factor_path=factor_path)
 
-    # latest_date = datetime(2020, 6, 30)
+    #latest_date = datetime(2020, 6, 30)
     # 对上一个月的数据添加月度价格变动百分比数据
-    z.fill_pct_monthly()
-    z.create_factor_file(datetime(2020, 7, 31))
+    #z.fill_pct_monthly()
+    z.create_factor_file(datetime(2020, 8, 31))
 
 
 if __name__ == "__main__":

@@ -1,84 +1,11 @@
+# from utility.single_factor_test import get_industry   # 不能从signal_factor_test导入，会引起相互引用问题
 import os
 import re
-from copy import deepcopy
 
-root_dair = r'D:\Database_Stock'
-data_dair = r'D:\Database_Stock\Data'
+root_dair = r'D:\文档\OneDrive\earning money\因子库维护'
+date_dair = r'D:\文档\OneDrive\earning money\因子库维护\Date'
 
 industry_benchmark = 'sw'
-
-# 用来选择行业的因子
-industry_factor_names = ['Return_6m', 'Return_12m', 'Roa_ttm', 'Roe_q', 'Profitmargin_q',
-                         'Profit_g_q', 'Roe_g_q', 'Sales_g_q', 'Sue']
-
-# # 不同行业用来打分的大类因子
-# factor_dict_for_scores = {
-#           # '建筑材料': ['quality', 'growth', 'grossrate', 'west'],
-#           'default': ['quality', 'growth'],  #, 'west'],
-#           }
-
-# 默认的大类因子及其二级因子
-default_dict = {'mom': ['M_reverse_20',	'M_reverse_60',	'M_reverse_180'],
-                'quality': ['Roa_q', 'Roe_q'],
-                'value': ['Ep', 'Bp'],
-                'growth': ['Profit_g_q', 'Sales_g_q', 'Roe_g_q', 'Sue'],
-                'size': ['Lncap_barra', 'Midcap_barra'],
-                'liquidity': ['Stom_barra', 'Stoq_barra', 'Stoa_barra'],
-                'volatility': ['Std_1m', 'Std_3m', 'Std_6m', 'Std_12m'],
-                'governance': ['Mgmt_ben_top3m'],
-                'west': ['West_netprofit_yoy', 'Est_instnum'],
-                }
-
-# 不同行业的需要合成的大类因子，在默认分类的基础上，通过对默认分类的添加和修改，来得到不同行业的大类合成因子
-factor_dict_to_concate = {
-               'default': default_dict,
-               '银行':    {'value': ['Ep', 'Bp'],
-                           'growth': ['Profit_g_q', 'Sales_g_q', 'Sue'],
-                          },
-               '汽车': {# 'mom': ['M_reverse_20',	'M_reverse_60',	'M_reverse_180'],
-                        # 'value': ['Bp', 'Ep'],
-                        'growth': ['Sales_g_q', 'Profit_g_q'],
-                        'quality': ['Roa_q', 'Roe_q'],
-                        'margin': ['Grossprofitmargin_diff'],
-                        'governance': ['Mgmt_ben_top3m'],
-                        'west': ['West_netprofit_yoy', 'Est_instnum'],
-                        'size': ['Midcap_barra'],
-                        # 'liquidity': ['Stom_barra', 'Stoq_barra', 'Stoa_barra'],
-                      },
-               '计算机': {
-                        # 'mom': ['M_reverse_20',	'M_reverse_60'],
-                        # 'value': ['Ep'],
-                        'quality': ['Grossprofitmargin_q'],
-                        'growth': ['Sales_g_q', 'Profit_g_q', 'Sue', 'Roe_g_q'],
-                        # 'governance': ['Mgmt_ben_top3m'],
-                        'west': ['West_netprofit_yoy', 'Est_instnum'],
-                        'size': ['Midcap_barra'],
-                        'rd': ['Rdtosales'],
-                        # 'liquidity': ['Stom_barra', 'Stoq_barra', 'Stoa_barra'],
-                       },
-               '传媒': {
-                        'value': ['Peg_3'],
-                        'quality': ['Assetturnover_q', 'Operationcashflowratio_q'],
-                        'growth': ['Ocf_g_q', 'Sales_g_q'],
-                       },
-               '国防军工':
-                       {'value': ['Bp'],
-                        'quality': ['Grossprofitmargin_diff'],
-                        'growth': ['Profit_G_q'],
-                       },
-               '证券Ⅱ': {'value': ['Bp', 'Ep'],},
-                }
-
-added_dict = {
-               # '建筑材料': {'grossrate': ['Grossprofitmargin_diff', 'Totalassetturnover']}
-             }
-
-for key, value in added_dict.items():
-    tmp_d = deepcopy(default_dict)
-    for k, v in value.items():
-        tmp_d.update({k: v})
-    factor_dict_to_concate.update({key: tmp_d})
-
 
 # 工作目录，存放代码和因子基本信息
 work_dir = os.path.dirname(os.path.dirname(__file__))
@@ -115,10 +42,10 @@ if not os.path.exists(total_result_path):
     os.makedirs(total_result_path)
 
 
-tds_interface = 'tushare'  # 'Wind' or 'tushare'
+tds_interface = 'tushare'      # or 'tushare'
 
 old_info_cols = ['No', 'code', 'name', 'Name', 'ipo_date', 'industry_zx', 'industry_zz', 'mkt', 'index',
-                 'industry_sw', 'MKT_CAP_FLOAT', '中信三级行业', '中信一级行业', '中信二级行业', 'Lncap_barra',
+                 'industry_sw', 'MKT_CAP_FLOAT', '中信三级行业', '中信一级行业', '中信二级行业',
                  'is_open1', 'PCT_CHG_NM', 'second_industry', 'third_industry', 'name', 'plate', 'RPS']
 
 zhmodel = re.compile(u'[\u4e00-\u9fa5]')  # 检查中文
@@ -134,7 +61,7 @@ for col in old_info_cols:
         new_c = col[0].upper() + col[1:].lower()
         new_cols.append(new_c)
 
-info_cols = list(set(old_info_cols) | set(new_cols))
+info_cols = old_info_cols + new_cols
 
 
 copy_cols = ['PCT_CHG_NM.csv', 'second_industry.csv', 'industry_sw.csv', 'MKT_CAP_FLOAT.csv']

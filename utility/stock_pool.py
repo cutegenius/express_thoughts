@@ -3,14 +3,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import copy
+from datetime import datetime
+import shelve
+from talib import abstract
+from rqalpha.api import *
+from rqalpha import run_func
+import tushare as ts
 from WindPy import *
-from utility.tool0 import Data, scaler, ma
-from utility.relate_to_tushare import stocks_basis, generate_months_ends, trade_days
-from utility.factor_data_preprocess import align
-from utility.relate_to_tushare import stocks_basis
-from utility.tool3 import adjust_months, append_df
-from utility.constant import info_cols
-from utility.single_factor_test import get_datdf_in_panel, get_ic, compute_ir
+from roe_select.reorganize_data import scopy_condition, rise_condition, append_df
+from barra_cne6.barra_template import Data
+from utility.related_to_rqalpha import change_code_f_rqalpha, select_stocks, add_stock_pool_txt, bt_by_rqalpha
+from utility.relate_to_tushare import stocks_basis, generate_months_ends
+from canslim.singal_stock_timing import position_control, back_test
+from utility.factor_data_preprocess import adjust_months, align
+from utility.relate_to_tushare import stocks_basis, trade_days
+from barra_cne6.compute_factor_2 import scaler, ma
+from utility.macro_data_process import fill_na_by_proceed
 
 
 factor_path = r'D:\pythoncode\IndexEnhancement\因子预处理模块\因子（已预处理）'
@@ -19,163 +27,6 @@ f_list = os.listdir(factor_path)
 
 date_list = [datetime.strptime(f.split('.')[0], "%Y-%m-%d") for f in f_list]
 month_ret = pd.Series(index=date_list)
-
-
-def ic_test(panel, factor_name):
-    ic_series = pd.Series()
-    for date, datdf in panel.items():
-        if factor_name not in datdf.columns:
-            continue
-
-        ic = get_ic(datdf, factor_name)
-        ic_series[date] = ic
-    return ic_series
-
-
-def compute_icir(n, panel_path, save_path, factors):
-    panel = get_datdf_in_panel(panel_path)
-    ics = pd.DataFrame()
-    for factor_name in factors:
-        ics_tmp = ic_test(panel, factor_name)
-        ics = pd.concat([ics, pd.DataFrame({factor_name: ics_tmp})], axis=1)
-    # 对非负值因子进行调整
-    nonnegative = ['quality', 'growth']
-    for ng in nonnegative:
-        if ng in ics.columns:
-            tmp = ics[ng]
-            tmp[tmp < 0] = 0
-            ics[ng] = tmp
-    icir = compute_ir(ics, n)
-    icir.to_csv(os.path.join(save_path, 'icir.csv'), encoding='gbk')
-
-    return icir
-
-
-def get_scores_with_wei(data_df, f_list, icir_se):
-    scores_total = pd.DataFrame()
-    val = data_df[f_list].values
-    wei = np.array(icir_se[f_list] / np.nansum(icir_se[f_list]))
-    scores = pd.Series(index=data_df.index, data=np.dot(val, wei))
-    return scores
-
-
-def select_stocks(df, codes_range, start_d=None, end_d=None):
-    '''
-    :param df: df的index是股票代码，columns是日期
-    :param codes_range:  股票代码范围
-    :param start_d: 选择的开始日期
-    :param end_d: 选择的结束日期
-    :return:
-    '''
-
-    # 结束日期
-    if end_d:
-        delta = df.columns - end_d
-        nearest = max([d for d in delta if d.days < 0])
-        loc_e = np.where(delta == nearest)[0][0]
-    # 开始日期
-    if start_d:
-        delta = df.columns - start_d
-        nearest = max([d for d in delta if d.days < 0])
-        loc_s = np.where(delta == nearest)[0][0]
-
-    if not start_d and not end_d:
-        new_df = df.loc[codes_range, :]
-    elif not start_d and end_d:
-        new_df = df.iloc[:, :loc_e + 1]
-    elif start_d and not end_d:
-        new_df = df.iloc[:, loc_s - 1:]
-    else:
-        new_df = df.iloc[:, loc_s - 1:loc_e + 1]
-
-    return new_df
-
-
-def fill_na_by_proceed(dat_df0):
-    dat_df = copy.deepcopy(dat_df0)
-    # 前值为上一行
-    # 添加NAN
-    for i in range(1, len(dat_df.index)):
-        for j in range(0, len(dat_df.columns)):
-            if pd.isna(dat_df.iloc[i, j]) and not pd.isna(dat_df.iloc[i - 1, j]):
-                dat_df.iloc[i, j] = dat_df.iloc[i - 1, j]
-
-    return dat_df
-
-
-# 范围条件，表示取大于 minV，小于maxV直接的标的。
-def scopy_condition(d_df, minV=None, maxV=None):
-
-    if minV and maxV:
-        res = d_df.applymap(lambda x: True if minV <= x <= maxV else False)
-    elif minV:
-        res = d_df.applymap(lambda x: True if minV <= x else False)
-    elif maxV:
-        res = d_df.applymap(lambda x: True if x <= maxV else False)
-
-    return res
-
-
-# 回升条件，表示取连续N各季度回升的标的
-def rise_condition(d_df, n):
-
-    d_df_s1 = d_df.shift(periods=1, axis=1)
-    d_df_s2 = d_df.shift(periods=2, axis=1)
-
-    res1 = d_df > d_df_s1
-    res2 = d_df_s1 > d_df_s2
-
-    if n == 1:
-        res = d_df > d_df_s1
-    elif n == -1:
-        res = d_df < d_df_s1
-    elif n == 2:
-        res = res1 & res2
-
-    return res
-
-
-# 月末自然日转为月末交易日
-def naturedate_to_tradeddate(dat_df, tar='index'):
-    # tar = 'index' or 'columns'
-    d_df = copy.deepcopy(dat_df)
-    tds = trade_days()
-    # 得到月末日期列表
-    months_end = []
-    for i in range(1, len(tds)):
-        if tds[i].month != tds[i - 1].month:
-            months_end.append(tds[i - 1])
-        elif i == len(tds) - 1:
-            months_end.append(tds[i])
-    # try:
-    #     months_end = [me for me in months_end if me.year >= dat_df.columns[0].year]
-    # except Exception as e:
-    #     print('debug')
-
-    if tar == 'index':
-        if months_end[0] > d_df.index[0]:   # 把dat_df中太早的数据给删除
-            to_del = [i for i in dat_df.index if i < months_end[0]]
-            d_df.drop(to_del, axis=0, inplace=True)
-        target_list = d_df.index
-    elif tar == 'columns':
-        if months_end[0] > d_df.columns[0]:  # 把dat_df中太早的数据给删除
-            to_del = [i for i in dat_df.columns if i < months_end[0]]
-            d_df.drop(to_del, axis=1, inplace=True)
-        target_list = d_df.columns
-
-    # 赵到对应的月末日期列表，可能年月同日不同的情况
-    new_col = []
-    for col in target_list:
-        for me in months_end:
-            if col.year == me.year and col.month == me.month:
-                new_col.append(me)
-    # 改变月末日期
-    if tar == 'index':
-        d_df.index = new_col
-    elif tar == 'columns':
-        d_df.columns = new_col
-
-    return d_df
 
 
 def from_stock_wei_2_industry_wei(wei_df):
@@ -433,17 +284,6 @@ def del_industry(stock_pool, to_del_indus):
         for ind in to_del_indus:
             si = [i for i in sw_1[sw_1[sw_1.columns[0]] == ind].index if i in stock_pool.index]
             v[si] = False
-
-    return stock_pool
-
-
-def del_market(stock_pool, to_del_mkt):
-    data = Data()
-    stock_basic = data.stock_basic_inform
-    mkt = stock_basic[['MKT']]
-    for col, v in stock_pool.iteritems():
-        si = [i for i in mkt[mkt[mkt.columns[0]] == to_del_mkt].index if i in stock_pool.index]
-        v[si] = False
 
     return stock_pool
 

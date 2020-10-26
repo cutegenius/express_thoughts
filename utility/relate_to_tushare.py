@@ -13,7 +13,7 @@ from WindPy import *
 # Wind里面的后缀是CFE, tushare的后缀是CFX
 
 if tds_interface == 'tushare':
-    token_path = r'C:\token_tushare.txt'
+    token_path = r'D:\文档\OneDrive\earning money\入职后资料\token_tushare.txt'
     if os.path.exists(token_path):
         f = open(token_path)
         token = f.read()
@@ -314,33 +314,48 @@ def update_adj_factor():
     dat_pd.to_csv(history_file, encoding='gbk')
 
 
-def trade_days(freq='d', interface='tushare'):
+def trade_days(freq='d', interface='wind'):
     st = '20030102'
     ed = datetime.today()
     # 使用tushare数据接口
     if interface == 'tushare':
         days = pro.trade_cal(exchange='SHFE', start_date=st, end_date=ed.strftime("%Y%m%d"))
         days = days[days['is_open'] == 1]
+
+        if freq == 'd':
+            res = [datetime.strptime(i, "%Y%m%d") for i in days['cal_date']]
+        elif freq == 'w':
+
+            days['group_basic'] = None
+            days = days.set_index('cal_date')
+            days.index = pd.to_datetime(days.index)
+            for i in days.index:
+                days.loc[i, 'group_basic'] = i.strftime("%Y-%W")
+
+            res = []
+            grouped = days.groupby('group_basic')
+            for i, v in grouped:
+                res.append(v.index[-1])
     # 使用Wind数据接口
     elif interface == 'wind':
         w.start()
         _, days = w.tdays(st, ed, usedf=True)
         days.columns = ['cal_date']
 
-    if freq == 'd':
-        res = [datetime.strptime(i, "%Y%m%d") for i in days['cal_date']]
-    elif freq == 'w':
+        if freq == 'd':
+            res = [i for i in days['cal_date']]
+        elif freq == 'w':
 
-        days['group_basic'] = None
-        days = days.set_index('cal_date')
-        days.index = pd.to_datetime(days.index)
-        for i in days.index:
-            days.loc[i, 'group_basic'] = i.strftime("%Y-%W")
+            days['group_basic'] = None
+            days = days.set_index('cal_date')
+            days.index = pd.to_datetime(days.index)
+            for i in days.index:
+                days.loc[i, 'group_basic'] = i.strftime("%Y-%W")
 
-        res = []
-        grouped = days.groupby('group_basic')
-        for i, v in grouped:
-            res.append(v.index[-1])
+            res = []
+            grouped = days.groupby('group_basic')
+            for i, v in grouped:
+                res.append(v.index[-1])
 
     return res
 
@@ -484,7 +499,7 @@ def update_daily_basic():
 
     # compute_month_value()
 
-
+# pb_monthly和pe_monthly的计算方式为取当月的最后一天
 def compute_month_value():
     data = Data()
     basic_path = os.path.join(date_dair, 'download_from_juyuan')
@@ -534,19 +549,333 @@ def update_future_price():
     save_p = r'D:\commodity_datebase\price_data'
     data.save(nh_future_price_daily, 'nh_future_price_daily.csv', save_path=save_p)
 
+def establish_fund_data():
+    '''
+    问题1：基金不全，场内场外有可能都不全。eg.165515.OF在场内就没有
+    问题2：基金经理不只显示初始基金的话，wind-基金经理明细有14159条记录，tushare有21277条记录
+    问题3：基金规模等因子，按照时间拼接，缺失严重，考虑改为只取2000行最大记录，但是按照基金进行拼接（最大100只基金每次）
+    问题4：单位净值中有重复的索引，所幸的是重复项的值大致相同
+    '''
+    try:
+        os.makedirs(date_dair + './fund' + './download_from_juyuan')
+        basic_path = os.path.join(date_dair, 'fund', 'download_from_juyuan')
+    except Exception as e:
+        basic_path = os.path.join(date_dair, 'fund', 'download_from_juyuan')
+
+    tds=trade_days()
+
+    df1 = pro.fund_basic(market='E')
+    df2 = pro.fund_basic(market='O')
+    fund_basic = pd.concat([df1, df2])
+    fund_basic = fund_basic.set_index('ts_code')
+
+    fund_company = pro.fund_company()
+    fund_company = fund_company.set_index('name')
+
+    fund_list = list(fund_basic.index.values)
+
+    fund_manager = pd.DataFrame()
+    for i in range(0, len(fund_list), 100):
+        seg_fund_list = ''
+        for code in fund_list[i:min(i + 100, len(fund_list))]:
+            seg_fund_list = seg_fund_list + code + ','
+        seg_fund_list = seg_fund_list[:-1]
+        manager = pro.fund_manager(ts_code=seg_fund_list)
+        fund_manager = pd.concat([fund_manager, manager])
+
+    fund_portfolio = {}
+    for code in fund_list:
+        portfolio = pro.fund_portfolio(ts_code=code)
+        # 每分钟最多访问该接口60次
+        sleep(60 / 60)
+        fund_portfolio[code] = portfolio
+
+    fund_div = {}
+    for code in fund_list:
+        div = pro.fund_div(ts_code=code)
+        # 每分钟最多访问该接口60次
+        sleep(60 / 60)
+        fund_div[code] = div
+
+    # 取得贼慢
+    fund_share = pd.DataFrame()
+    st_date = datetime(2009, 1, 1)
+    ed_date = st_date + timedelta(1999)
+    while (ed_date <= datetime.today()):
+        def gen_dates(b_date, days):
+            day = timedelta(days=1)
+            for i in range(days):
+                yield b_date + day * i
+
+        data = []
+        for d in gen_dates(st_date, ((ed_date - st_date).days + 1)):
+            if d in tds:
+                data.append(d)
+        if (ed_date.strftime("%Y%m%d") != datetime.today().strftime("%Y%m%d")):
+            add_df = pd.DataFrame()
+            for code in fund_list:
+                df_tmp = pro.fund_share(ts_code=code, start_date=st_date.strftime('%Y%m%d'),
+                                        end_date=ed_date.strftime("%Y%m%d"))
+                sleep(60 / 400)
+                if len(df_tmp) == 0:
+                    colname = df_tmp.columns
+                    df_tmp = pd.DataFrame(np.zeros((len(data), 5)))
+                    df_tmp.columns = colname
+                    df_tmp.index = data
+                else:
+                    df_tmp = df_tmp.set_index('trade_date')
+                    df_tmp.index = pd.to_datetime(df_tmp.index)
+                add_df = pd.concat([add_df, pd.DataFrame({code: df_tmp['fd_share']})], axis=1)
+            fund_share = pd.concat([fund_share, add_df])
+            st_date = ed_date + timedelta(1)
+            ed_date = min((st_date + timedelta(1999)), datetime.today())
+        else:
+            add_df = pd.DataFrame()
+            for code in fund_list:
+                df_tmp = pro.fund_share(ts_code=code, start_date=st_date.strftime('%Y%m%d'),
+                                        end_date=ed_date.strftime("%Y%m%d"))
+                sleep(60 / 400)
+                if len(df_tmp) == 0:
+                    colname = df_tmp.columns
+                    df_tmp = pd.DataFrame(np.zeros((len(data), 5)))
+                    df_tmp.columns = colname
+                    df_tmp.index = data
+                else:
+                    df_tmp = df_tmp.set_index('trade_date')
+                    df_tmp.index = pd.to_datetime(df_tmp.index)
+                add_df = pd.concat([add_df, pd.DataFrame({code: df_tmp['fd_share']})], axis=1)
+            fund_share = pd.concat([fund_share, add_df])
+            break
+
+    fund_adj = pd.DataFrame()
+    st_date = datetime(2009, 1, 1)
+    ed_date = st_date + timedelta(1999)
+    while (ed_date <= datetime.today()):
+        def gen_dates(b_date, days):
+            day = timedelta(days=1)
+            for i in range(days):
+                yield b_date + day * i
+
+        data = []
+        for d in gen_dates(st_date, ((ed_date - st_date).days + 1)):
+            if d in tds:
+                data.append(d)
+        if (ed_date.strftime("%Y%m%d") != datetime.today().strftime("%Y%m%d")):
+            add_df = pd.DataFrame()
+            for code in fund_list:
+                df_tmp = pro.fund_adj(ts_code=code, start_date=st_date.strftime('%Y%m%d'),
+                                      end_date=ed_date.strftime("%Y%m%d"))
+                sleep(60 / 400)
+                if len(df_tmp) == 0:
+                    colname = df_tmp.columns
+                    df_tmp = pd.DataFrame(np.zeros((len(data), 3)))
+                    df_tmp.columns = colname
+                    df_tmp.index = data
+                else:
+                    df_tmp = df_tmp.set_index('trade_date')
+                    df_tmp.index = pd.to_datetime(df_tmp.index)
+                add_df = pd.concat([add_df, pd.DataFrame({code: df_tmp['adj_factor']})], axis=1)
+            fund_adj = pd.concat([fund_adj, add_df])
+            st_date = ed_date + timedelta(1)
+            ed_date = min((st_date + timedelta(1999)), datetime.today())
+        else:
+            add_df = pd.DataFrame()
+            for code in fund_list:
+                df_tmp = pro.fund_adj(ts_code=code, start_date=st_date.strftime('%Y%m%d'),
+                                      end_date=ed_date.strftime("%Y%m%d"))
+                sleep(60 / 400)
+                if len(df_tmp) == 0:
+                    colname = df_tmp.columns
+                    df_tmp = pd.DataFrame(np.zeros((len(data), 3)))
+                    df_tmp.columns = colname
+                    df_tmp.index = data
+                else:
+                    df_tmp = df_tmp.set_index('trade_date')
+                    df_tmp.index = pd.to_datetime(df_tmp.index)
+                add_df = pd.concat([add_df, pd.DataFrame({code: df_tmp['adj_factor']})], axis=1)
+            fund_adj = pd.concat([fund_adj, add_df])
+            break
+
+    unit_nav = pd.DataFrame()
+    accum_nav = pd.DataFrame()
+    accum_div = pd.DataFrame()
+    net_asset = pd.DataFrame()
+    total_netasset = pd.DataFrame()
+    adj_nav = pd.DataFrame()
+    for d in reversed(tds):
+        df = pro.fund_nav(end_date=d.strftime('%Y%m%d'))
+        if len(df) == 0:
+            continue
+        else:
+            df = df.set_index('ts_code')
+            df = df.groupby(df.index).first()
+            unit_nav = pd.concat([unit_nav, pd.DataFrame({d.strftime('%Y%m%d'): df['unit_nav']})], axis=1)
+            accum_nav = pd.concat([accum_nav, pd.DataFrame({d.strftime('%Y%m%d'): df['accum_nav']})], axis=1)
+            accum_div = pd.concat([accum_div, pd.DataFrame({d.strftime('%Y%m%d'): df['accum_div']})], axis=1)
+            net_asset = pd.concat([net_asset, pd.DataFrame({d.strftime('%Y%m%d'): df['net_asset']})], axis=1)
+            total_netasset = pd.concat([total_netasset, pd.DataFrame({d.strftime('%Y%m%d'): df['total_netasset']})],
+                                       axis=1)
+            adj_nav = pd.concat([adj_nav, pd.DataFrame({d.strftime('%Y%m%d'): df['adj_nav']})], axis=1)
+
+    fund_open = pd.DataFrame()
+    fund_high = pd.DataFrame()
+    fund_low = pd.DataFrame()
+    fund_close = pd.DataFrame()
+    fund_pre_close = pd.DataFrame()
+    fund_change = pd.DataFrame()
+    fund_pct_change = pd.DataFrame()
+    fund_vol = pd.DataFrame()
+    fund_amount = pd.DataFrame()
+    st_date = datetime(2009, 1, 1)
+    ed_date = st_date + timedelta(799)
+    while (ed_date <= datetime.today()):
+        def gen_dates(b_date, days):
+            day = timedelta(days=1)
+            for i in range(days):
+                yield b_date + day * i
+
+        data = []
+        for d in gen_dates(st_date, ((ed_date - st_date).days + 1)):
+            if d in tds:
+                data.append(d)
+        if (ed_date.strftime("%Y%m%d") != datetime.today().strftime("%Y%m%d")):
+            add_df_open = pd.DataFrame()
+            add_df_high = pd.DataFrame()
+            add_df_low = pd.DataFrame()
+            add_df_close = pd.DataFrame()
+            add_df_pre_close = pd.DataFrame()
+            add_df_change = pd.DataFrame()
+            add_df_pct_change = pd.DataFrame()
+            add_df_vol = pd.DataFrame()
+            add_df_amount = pd.DataFrame()
+
+            for code in fund_list:
+                df_tmp = pro.fund_daily(ts_code=code, start_date=st_date.strftime('%Y%m%d'),
+                                        end_date=ed_date.strftime("%Y%m%d"))
+                sleep(60 / 250)
+                if len(df_tmp) == 0:
+                    colname = df_tmp.columns
+                    df_tmp = pd.DataFrame(np.zeros((len(data), 11)))
+                    df_tmp.columns = colname
+                    df_tmp.index = data
+                else:
+                    df_tmp = df_tmp.set_index('trade_date')
+                    df_tmp.index = pd.to_datetime(df_tmp.index)
+                add_df_open = pd.concat([add_df_open, pd.DataFrame({code: df_tmp['open']})], axis=1)
+                add_df_high = pd.concat([add_df_high, pd.DataFrame({code: df_tmp['high']})], axis=1)
+                add_df_low = pd.concat([add_df_low, pd.DataFrame({code: df_tmp['low']})], axis=1)
+                add_df_close = pd.concat([add_df_close, pd.DataFrame({code: df_tmp['close']})], axis=1)
+                add_df_pre_close = pd.concat([add_df_pre_close, pd.DataFrame({code: df_tmp['pre_close']})], axis=1)
+                add_df_change = pd.concat([add_df_change, pd.DataFrame({code: df_tmp['change']})], axis=1)
+                add_df_pct_change = pd.concat([add_df_pct_change, pd.DataFrame({code: df_tmp['pct_chg']})], axis=1)
+                add_df_vol = pd.concat([add_df_vol, pd.DataFrame({code: df_tmp['vol']})], axis=1)
+                add_df_amount = pd.concat([add_df_amount, pd.DataFrame({code: df_tmp['amount']})], axis=1)
+            fund_open = pd.concat([fund_open, add_df_open])
+            fund_high = pd.concat([fund_high, add_df_high])
+            fund_low = pd.concat([fund_low, add_df_low])
+            fund_close = pd.concat([fund_close, add_df_close])
+            fund_pre_close = pd.concat([fund_pre_close, add_df_pre_close])
+            fund_change = pd.concat([fund_change, add_df_change])
+            fund_pct_change = pd.concat([fund_pct_change, add_df_pct_change])
+            fund_vol = pd.concat([fund_vol, add_df_vol])
+            fund_amount = pd.concat([fund_amount, add_df_amount])
+
+            st_date = ed_date + timedelta(1)
+            ed_date = min((st_date + timedelta(799)), datetime.today())
+        else:
+            add_df_open = pd.DataFrame()
+            add_df_high = pd.DataFrame()
+            add_df_low = pd.DataFrame()
+            add_df_close = pd.DataFrame()
+            add_df_pre_close = pd.DataFrame()
+            add_df_change = pd.DataFrame()
+            add_df_pct_change = pd.DataFrame()
+            add_df_vol = pd.DataFrame()
+            add_df_amount = pd.DataFrame()
+            for code in fund_list:
+                df_tmp = pro.fund_daily(ts_code=code, start_date=st_date.strftime('%Y%m%d'),
+                                        end_date=ed_date.strftime("%Y%m%d"))
+                sleep(60 / 250)
+                if len(df_tmp) == 0:
+                    colname = df_tmp.columns
+                    df_tmp = pd.DataFrame(np.zeros((len(data), 11)))
+                    df_tmp.columns = colname
+                    df_tmp.index = data
+                else:
+                    df_tmp = df_tmp.set_index('trade_date')
+                    df_tmp.index = pd.to_datetime(df_tmp.index)
+                add_df_open = pd.concat([add_df_open, pd.DataFrame({code: df_tmp['open']})], axis=1)
+                add_df_high = pd.concat([add_df_high, pd.DataFrame({code: df_tmp['high']})], axis=1)
+                add_df_low = pd.concat([add_df_low, pd.DataFrame({code: df_tmp['low']})], axis=1)
+                add_df_close = pd.concat([add_df_close, pd.DataFrame({code: df_tmp['close']})], axis=1)
+                add_df_pre_close = pd.concat([add_df_pre_close, pd.DataFrame({code: df_tmp['pre_close']})], axis=1)
+                add_df_change = pd.concat([add_df_change, pd.DataFrame({code: df_tmp['change']})], axis=1)
+                add_df_pct_change = pd.concat([add_df_pct_change, pd.DataFrame({code: df_tmp['pct_chg']})], axis=1)
+                add_df_vol = pd.concat([add_df_vol, pd.DataFrame({code: df_tmp['vol']})], axis=1)
+                add_df_amount = pd.concat([add_df_amount, pd.DataFrame({code: df_tmp['amount']})], axis=1)
+            fund_open = pd.concat([fund_open, add_df_open])
+            fund_high = pd.concat([fund_high, add_df_high])
+            fund_low = pd.concat([fund_low, add_df_low])
+            fund_close = pd.concat([fund_close, add_df_close])
+            fund_pre_close = pd.concat([fund_pre_close, add_df_pre_close])
+            fund_change = pd.concat([fund_change, add_df_change])
+            fund_pct_change = pd.concat([fund_pct_change, add_df_pct_change])
+            fund_vol = pd.concat([fund_vol, add_df_vol])
+            fund_amount = pd.concat([fund_amount, add_df_amount])
+            break
+
+    fund_basic.to_csv(os.path.join(basic_path, 'fund_basic.csv'), encoding='gbk')
+    fund_company.to_csv(os.path.join(basic_path, 'fund_company.csv'), encoding='gbk')
+    fund_manager.to_csv(os.path.join(basic_path, 'fund_manager.csv'), encoding='gbk')
+    fund_share.to_csv(os.path.join(basic_path, 'fund_share.csv'), encoding='gbk')
+    fund_adj.to_csv(os.path.join(basic_path, 'fund_adj.csv'), encoding='gbk')
+    try:
+        os.makedirs(date_dair + './fund' + './download_from_juyuan' + './fund_portfolio')
+        for k, v in fund_portfolio.items():
+            v.to_csv(os.path.join(basic_path, 'fund_portfolio', k + '.csv'), encoding='gbk')
+    except Exception as e:
+        for k, v in fund_portfolio.items():
+            v.to_csv(os.path.join(basic_path, 'fund_portfolio', k + '.csv'), encoding='gbk')
+    try:
+        os.makedirs(date_dair + './fund' + './download_from_juyuan' + './fund_div')
+        for k, v in fund_div.items():
+            v.to_csv(os.path.join(basic_path, 'fund_div', k + '.csv'), encoding='gbk')
+    except Exception as e:
+        for k, v in fund_portfolio.items():
+            v.to_csv(os.path.join(basic_path, 'fund_div', k + '.csv'), encoding='gbk')
+    unit_nav.to_csv(os.path.join(basic_path, 'unit_nav.csv'), encoding='gbk')
+    accum_nav.to_csv(os.path.join(basic_path, 'accum_nav.csv'), encoding='gbk')
+    accum_div.to_csv(os.path.join(basic_path, 'accum_div.csv'), encoding='gbk')
+    net_asset.to_csv(os.path.join(basic_path, 'net_asset.csv'), encoding='gbk')
+    total_netasset.to_csv(os.path.join(basic_path, 'total_netasset.csv'), encoding='gbk')
+    adj_nav.to_csv(os.path.join(basic_path, 'adj_nav.csv'), encoding='gbk')
+    fund_open.to_csv(os.path.join(basic_path, 'fund_open.csv'), encoding='gbk')
+    fund_high.to_csv(os.path.join(basic_path, 'fund_high.csv'), encoding='gbk')
+    fund_low.to_csv(os.path.join(basic_path, 'fund_low.csv'), encoding='gbk')
+    fund_close.to_csv(os.path.join(basic_path, 'fund_close.csv'), encoding='gbk')
+    fund_pre_close.to_csv(os.path.join(basic_path, 'fund_pre_close.csv'), encoding='gbk')
+    fund_change.to_csv(os.path.join(basic_path, 'fund_change.csv'), encoding='gbk')
+    fund_pct_change.to_csv(os.path.join(basic_path, 'fund_pct_change.csv'), encoding='gbk')
+    fund_vol.to_csv(os.path.join(basic_path, 'fund_vol.csv'), encoding='gbk')
+    fund_amount.to_csv(os.path.join(basic_path, 'fund_amount.csv'), encoding='gbk')
+
+
+
+
+
 
 if __name__ == '__main__':
+    establish_fund_data()
+    #compute_month_value()
+    #update_futmap()
 
-    # compute_month_value()
-    update_futmap()
+    #update_adj_factor()
 
-    # update_adj_factor()
+    #update_pct_monthly()
 
-    # update_pct_monthly()
+    #update_main_net_buy_amout()
+    #get_net_buy_rate()
 
-    # update_main_net_buy_amout()
-    # get_net_buy_rate()
-
-    # update_adj_factor()
-    # trade_days(freq='w')
+    #update_adj_factor()
+    #trade_days(freq='w')
 

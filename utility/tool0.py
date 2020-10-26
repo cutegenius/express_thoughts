@@ -8,14 +8,13 @@ import os
 import warnings
 import numpy as np
 import pandas as pd
-from utility.constant import data_dair
 import copy
 import pandas.tseries.offsets as toffsets
 from dask import dataframe as dd
+from utility.constant import date_dair
 warnings.filterwarnings('ignore')
 
-
-ROOT_PATH = data_dair
+ROOT_PATH = date_dair
 
 
 def ensure_time(x):
@@ -45,9 +44,6 @@ class Data:
         if not os.path.exists(self.save_path):
             os.mkdir(self.save_path)
 
-        # self.pathmap['west_netprofit_yoy']
-
-    # self._ori_factors['return_12m']
     def _all_files_path(self, rootDir):
         for root, dirs, files in os.walk(rootDir):   # 分别代表根目录、文件夹、文件
             for file in files:                       # 遍历文件
@@ -61,7 +57,7 @@ class Data:
             f_name = f_name.split('.')[0]
             if all(n.isnumeric() for n in f_name[-10:].split('-')):
                 f_name = f_name[:-11]
-        return f_name            # f_name.lower()
+        return f_name.lower()
 
     def _open_file(self, name, **kwargs):        
         path, file_name = self.pathmap[name]
@@ -112,6 +108,10 @@ class Data:
             kwargs['parse_dates'] = ['ipo_date', "delist_date"]
         elif fname == 'all_index_code':
             kwargs['parse_dates'] = ['PubDate', 'EndDate']
+        elif fname == 'month_map':
+            kwargs['parse_dates'] = ['trade_date', 'calendar_date']
+        elif fname == 'month_group':
+            kwargs['parse_dates'] = ['calendar_date']
         else:
             kwargs['index_col'] = [0]
         dat = pd.read_excel(path, encoding='gbk', **kwargs)
@@ -156,8 +156,12 @@ class Data:
         return self.__dict__[name]
 
     def _get_fac_valid_name(self, name):
+        if name.upper() in self._ori_factors:
+            return name.upper()
+        if name.lower() in self._ori_factors:
+            return name.lower()
 
-        if name not in self._ori_factors:
+        if name not in self._ori_factors :
             i = 0
             while True:
                 try:
@@ -289,29 +293,7 @@ def add_stock_pool_txt(stocks_list, save_name, pool_to_wind_path=None, renew=Fal
     f.writelines(pool)
     f.close()  # 关闭文件
 
-
-# 均线
-def ma(dat_df, n):
-
-    if n == 0:
-        return dat_df
-
-    dat_v = dat_df.values
-    ma_v = np.full(dat_df.shape, np.nan)
-    if len(dat_df.columns) > 1:
-        for i in range(n, len(dat_df.columns)):
-            count_sec = dat_v[:, i - n:i].mean(axis=1)
-            ma_v[:, i] = count_sec
-    else:
-        for i in range(n, len(dat_df.index)):
-            count_sec = dat_v[i - n:i, :].mean(axis=0)
-            ma_v[i, :] = count_sec
-
-    ma_df = pd.DataFrame(data=ma_v, index=dat_df.index, columns=dat_df.columns)
-
-    return ma_df
-
-
+    
 if __name__ == "__main__":
     # 测试代码
     data = Data()

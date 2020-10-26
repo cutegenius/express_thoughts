@@ -21,7 +21,7 @@ from dask.multiprocessing import get
 # from pyfinance.ols import PandasRollingOLS as rolling_ols
 from pyfinance.utils import rolling_windows
 from utility.tool0 import Data
-from utility.tool3 import adjust_months, add_to_panels, append_df
+from utility.factor_data_preprocess import adjust_months, add_to_panels, align, append_df
 from utility.relate_to_tushare import generate_months_ends
 
 warnings.filterwarnings('ignore')
@@ -39,7 +39,7 @@ __spec__ = None
 
 
 def get_signal_season_value(dat_df):
-    sig_season_va = pd.DataFrame(None, index=dat_df.index, columns=dat_df.columns)
+    sig_season_va = pd.DataFrame(None, index=dat_df.index, columns=dat_df.columns) #组建了一个和传入数据框框架相同的数据框
 
     for i in range(0, len(dat_df.columns)):
         col = dat_df.columns[i]
@@ -83,7 +83,7 @@ def get_season_mean_value(dat_df):
 
 # 计时器装饰器
 def time_decorator(func):
-    @wraps(func)
+    @wraps(func)#加在最内层函数正上方,确保查看函数信息的方法可用
     def timer(*args, **kwargs):
         start = datetime.datetime.now()
         result = func(*args, **kwargs)
@@ -94,6 +94,7 @@ def time_decorator(func):
 
 
 # 延迟初始化属性，第一次调用时不在__dict__里，调用相关函数，第二次调用时已经在__dict__里了，不再重复计算
+#第一次调用时计算过程被执行，第二次调用它的时候，计算过程没有执行，是因为计算一次之后，它的值就被储存起来了，第二次直接拿出来用，从而加快了程序的运行。
 class lazyproperty:
     def __init__(self, func):
         self.func = func
@@ -504,6 +505,29 @@ class CALFUNC(Data):
         datdf = self.clean_data(datdf)
         datdf = datdf.shift(shift)
         return datdf
+
+    # 对传入的df进行处理，如果传入的都是是多列的数据，确保他们有相同的股票代码和日期，如果有一个是单列数据，确保他们有相同的日期
+    def _align(self, df1, df2, *dfs):
+        # chain 是把多个迭代器合成一个迭代器
+        dfs_all = [self.clean_data(df) for df in chain([df1, df2], dfs)]
+        # 看df1和df2是否有单个列的
+        if any(len(df.shape) == 1 or 1 in df.shape for df in dfs_all):
+            dims = 1
+        else:
+            dims = 2
+        # 对日期求交期. reduce: 用传给reduce中的函数function（有两个参数）先对集合中的第 1、2个元素进行操作，
+        # 得到的结果再与第三个数据用function函数运算，最后得到一个结果。
+        mut_date_range = sorted(reduce(lambda x, y: x.intersection(y), (df.index for df in dfs_all)))
+        # 对columns求交集
+        mut_codes = sorted(reduce(lambda x, y: x.intersection(y), (df.columns for df in dfs_all)))
+        # 如果df1和df2都是多维的，求日期和代码的交集；否则，只求日期的交集
+        if dims == 2:
+            dfs_all = [df.loc[mut_date_range, mut_codes] for df in dfs_all]
+        elif dims == 1:
+            dfs_all = [df.loc[mut_date_range, :] for df in dfs_all]
+        return dfs_all
+
+        # tt = [df for df in chain([df1, df2], dfs)]
 
     def mv_weighted_ret(self, negotiablemv, change_pct):
         return change_pct*negotiablemv/negotiablemv.sum()

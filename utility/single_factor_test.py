@@ -4,7 +4,7 @@ Created on Fri Mar  1 08:25:00 2019
 
 @author: HP
 """
-from utility.tool0 import Data
+from barra_cne6.barra_template import Data
 import os
 import warnings
 import numpy as np
@@ -122,16 +122,16 @@ def get_ic(datdf, fac_name, neutralize=False):
 # 回归参数总结
 def regression_summary(ts, params, ics):
     res = {}
-    res['t值绝对值平均值'] = np.nanmean(np.abs(ts))                  # t值绝对值平均值
+    res['t值绝对值平均值'] = np.mean(np.abs(ts))                  # t值绝对值平均值
     res['t值绝对值>2概率'] = len(ts[np.abs(ts) > 2]) / len(ts)    # t值绝对值>2概率
      
-    res['因子收益平均值'] = np.nanmean(params)                       # 因子收益平均值
-    res['因子收益标准差'] = np.nanstd(params)                        # 因子收益标准差
-    res['因子收益t值'] = stats.ttest_1samp(params[~pd.isnull(params)], 0).statistic     # 因子收益t值
-    res['因子收益>0概率'] = len(params[params > 0]) / len(params)   # 因子收益>0概率
+    res['因子收益平均值'] = np.mean(params)                       # 因子收益平均值
+    res['因子收益标准差'] = np.std(params)                        # 因子收益标准差
+    res['因子收益t值'] = stats.ttest_1samp(params, 0).statistic   # 因子收益t值
+    res['因子收益>0概率'] = len(params[params > 0]) / len(params) # 因子收益>0概率
     
-    res['IC平均值'] = np.nanmean(ics)                                # IC平均值
-    res['IC标准差'] = np.nanstd(ics)                                 # IC标准差
+    res['IC平均值'] = np.mean(ics)                                # IC平均值
+    res['IC标准差'] = np.std(ics)                                 # IC标准差
     res['IRIC'] = res['IC平均值'] / res['IC标准差']               # IRIC
     res['IC>0概率'] = len(ics[ics>0]) / len(ics)                  # IC>0概率
     return pd.Series(res)
@@ -178,12 +178,15 @@ def t_ic_test(datpanel, factor_name):
 
 # ------------------------
 # 得到一年的 datdf
-def get_datdf_in_panel(factor_path):
+def get_datdf_in_year(year, factor_path):
 
     dates = []
+    # 得到该year具体包含得月份
     for f in os.listdir(factor_path):
         curdate = f.split('.')[0]
-        dates.append(curdate)
+        curyear = pd.to_datetime(curdate).year
+        if curyear == year:
+            dates.append(curdate)
 
     # 读取相应月份得数据
     datpanel = {}
@@ -224,35 +227,79 @@ def get_test_result(factors, datpanel):
 
 # ------------------------
 # 按年度遍历来计算factors 的t值和ic值
-def single_factor_test(path_dict, factors=None, icir_window=12):
+def test_yearly(path_dict, factors=None, start_year=2009, end_year=2018, industry_benchmark='sw', icir_window=6):
     '''
     增加了分板块测试的功能，plate是一个tuple,0为板块名称，1为其包含得一级行业，若是单行业测试，则其名称和一级行业相同
     '''
 
     global info_cols
-    print("\n开始进行T检验和IC检验...")
 
     sf_test_save_path = path_dict['sf_test_save_path']
     factor_path = path_dict['factor_path']
+    total_result_path = path_dict['total_result_path']
 
-    datpanel = get_datdf_in_panel(factor_path)
-    # 若未指定特定测试的因子，则默认测试所有因子
-    if factors is None:
-        factors = get_factor_names()
-    test_result, ts, frets, ics = get_test_result(factors, datpanel)
+    years = range(start_year, end_year+1)
+    test_result = {}
+    ts_all, frets_all, ics_all = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    for year in years:
+        # print(year)
+        # 读取相应年份得数据
+        datpanel = get_datdf_in_year(year, factor_path)
+        # 若未指定特定测试的因子，则默认测试所有因子
+        if factors is None:
+            factors = get_factor_names()
+        cur_test_res, ts, frets, ics = get_test_result(factors, datpanel)
+        test_result[year] = cur_test_res
+        
+        ts_all = pd.concat([ts_all, ts])
+        frets_all = pd.concat([frets_all, frets])
+        ics_all = pd.concat([ics_all, ics])
 
-    icir = compute_ir(ics, icir_window)
+    icir_all = compute_ir(ics_all, icir_window)
 
     # 存储所有t值、因子收益率、ic值时间序列数据
-    for save_name, df in zip(['t_value', 'factor_return', 'ic', 'icir', 'T检验&IC检验结果'],
-                             [ts, frets, ics, icir, test_result]):
+    for save_name, df in zip(['t_value', 'factor_return', 'ic', 'icir'],
+                             [ts_all, frets_all, ics_all, icir_all]):
         df.to_csv(os.path.join(sf_test_save_path, save_name+'.csv'),
                   encoding='gbk')
+        
+    # 存储检验结果表格
+    test_result = pd.Panel(test_result)
+    test_result = test_result.swapaxes(2, 0)
+    test_result = test_result.swapaxes(1, 2)
+    # pandas中给panel添加数据的特有方式，以dataframe的方式添加，不能使用迭代赋值的方法。
+    to_add = pd.DataFrame(index=test_result.items, columns=test_result.minor_axis)
+    for item in test_result.items:
+        tmp_df = test_result[item]
+        tmp_m = tmp_df.mean()
+        to_add.loc[item, :] = tmp_m
+    # 添加的时候也很奇怪
+    test_result.loc[:, '年度平均值', :] = to_add.T
+
+    # 单独行业的存储
+    file_name = '\\T检验&IC检验结果.xlsx'
+    try:
+        test_result.to_excel(sf_test_save_path+file_name,
+                         encoding='gbk')
+    except Exception as e:
+        print('bug')
+
+    # 汇总结果的存储。
+    total_result_dict['全部'] = to_add
+
+    if os.path.exists(os.path.join(total_result_path, 'result.xlsx')):
+        os.remove(os.path.join(total_result_path, 'result.xlsx'))
+
+    if not os.path.exists(total_result_path):
+        os.makedirs(total_result_path)
+
+    total_result_panel = pd.Panel(total_result_dict)
+    total_result_panel.to_excel(os.path.join(total_result_path, 'result.xlsx'),
+                                encoding='gbk')
 
     # 绘制单因子检验图，并进行存储
-    plot_test_figure(ts, frets, ics, save=True)
-    print(f"检验完毕！结果见目录：{path_dict['sf_test_save_path']}")
-    print('*'*80)
+    plot_test_figure(ts_all, frets_all, ics_all, save=True)
+
 
 # ------------------------
 # 画图输出
@@ -752,7 +799,7 @@ class SingleFactorLayerDivisionBacktest:
         return weights
 
 
-def panel_to_matrix(factors, factor_path, save_path):
+def panel_to_matrix(factors, factor_path, save_path, special_plate=None):
     """
     将经过预处理的因子截面数据转换为因子矩阵数据
     """
@@ -761,12 +808,11 @@ def panel_to_matrix(factors, factor_path, save_path):
     factor_matrix_path = os.path.join(save_path, '因子矩阵') if not save_path.endswith('因子矩阵') else save_path 
     if not os.path.exists(factor_matrix_path):
         os.mkdir(factor_matrix_path)
-    # 下面的条件退出的代码就不是可以容纳更新的逻辑
-    # else:
-    #     factors = set(tuple(factors_to_be_saved)) - \
-    #         set(f.split('.')[0] for f in os.listdir(factor_matrix_path))
-    #     if len(factors) == 0:
-    #         return None
+    else:
+        factors = set(tuple(factors_to_be_saved)) - \
+            set(f.split('.')[0] for f in os.listdir(factor_matrix_path))
+        if len(factors) == 0:
+            return None
         
     factors = sorted(f.replace('_div_', '/') for f in factors) 
     if '预处理' in factor_path:
@@ -779,8 +825,6 @@ def panel_to_matrix(factors, factor_path, save_path):
 
         if 'Code' in datdf.columns:
             datdf = datdf.set_index('Code')
-        elif 'code' in datdf.columns:
-            datdf = datdf.set_index('code')
         elif 'Name' in datdf.columns:
             datdf = datdf.set_index('Name')
         else:

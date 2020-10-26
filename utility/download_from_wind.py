@@ -1,17 +1,14 @@
-'''
-从wind数据库中提取数据，该文件主要提取上证综指的月度成分及权重。
-'''
 
 import pandas as pd
 import numpy as np
 from collections import defaultdict
 from utility.tool0 import Data
-from utility.constant import data_dair
+from utility.constant import date_dair
 import os
 from utility.constant import code_name_map_citic, code_name_map_sw, index_code_name_map
 from utility.relate_to_tushare import stocks_basis, trade_days, generate_months_ends
 from WindPy import *
-
+from dateutil.relativedelta import relativedelta
 
 class StructWind:
     def __init__(self, name, period, other=None):
@@ -259,11 +256,41 @@ def update_index_data():
 
 def update_index_data_daily():
     w.start()
-    index_path = os.path.join(data_dair, 'index')
+    index_path = os.path.join(date_dair, 'index')
     name_map_dict = {'881001.WI': 'WindA',
                      '000300.SH': 'HS300',
                      '000016.SH': 'SZ50',
                      '000905.SH': 'ZZ500',
+                     '000001.SH': '上证指数',
+                     '930890.CSI':'主动股基',
+                     'H30265.CSI':'进取股基',
+                     '930892.CSI':'普通混基',
+                     '930950.CSI':'偏股基金',
+                     'H11022.CSI':'混合基金',
+                     'H11021.CSI':'股票基金',
+                     '930893.CSI':'灵活混基',
+                     '930891.CSI':'被动股基',
+                     '930889.CSI':'ETF市价',
+                     'H11024.CSI':'ETF基金',
+                     '931153.CSI':'FOF基金',
+                     '930898.CSI':'转债债基',
+                     'H11020.CSI':'中证基金',
+                     '000011.SH':'上证基金指数',
+                     'H11026.CSI':'QDII基金',
+                     '930897.CSI':'非纯债基',
+                     'H30264.CSI':'稳健股基',
+                     'H11023.CSI':'债券基金',
+                     '930610.CSI':'普通债基',
+                     'H11025.CSI':'货币基金',
+                     '930895.CSI':'定开债基',
+                     '930609.CSI':'纯债债基',
+                     '399306.SZ': '深证ETF',
+                     '399103.SZ': '乐富指数',
+                     '399380.SZ': '国证ETF',
+                     '399379.SZ': '国证基金',
+                     'CN6070.CNI': '中国股基指数',
+                     'CN6072.CNI': '中国债基指数',
+                     'CN6071.CNI': '中国混基指数'
                      }
 
     if not os.path.exists(os.path.join(index_path, 'index_price_daily.csv')):
@@ -282,7 +309,7 @@ def update_index_data_daily():
         print('指数日度表现已经更新到最新日期，自动退出')
         return None
 
-    res_df = w.wsd("881001.WI,000300.SH,000016.SH,000905.SH", "close", st_dt.strftime('%Y-%m-%d'),
+    res_df = w.wsd("881001.WI,000300.SH,000016.SH,000905.SH,000001.SH,930890.CSI,H30265.CSI,930892.CSI,930950.CSI,H11022.CSI,H11021.CSI,930893.CSI,930891.CSI,930889.CSI,H11024.CSI,931153.CSI,930898.CSI,H11020.CSI,000011.SH,H11026.CSI,930897.CSI,H30264.CSI,H11023.CSI,930610.CSI,H11025.CSI,930895.CSI,930609.CSI,399306.SZ,399103.SZ,399380.SZ,399379.SZ,CN6070.CNI,CN6072.CNI,CN6071.CNI", "close", st_dt.strftime('%Y-%m-%d'),
              ed_dt.strftime('%Y-%m-%d'), usedf=True)
     res_df = res_df[1]
 
@@ -296,11 +323,41 @@ def update_index_data_daily():
 
 def update_index_data_monthly():
     w.start()
-    index_path = os.path.join(data_dair, 'index')
+    index_path = os.path.join(date_dair, 'index')
     name_map_dict = {'881001.WI': 'WindA',
                      '000300.SH': 'HS300',
                      '000016.SH': 'SZ50',
                      '000905.SH': 'ZZ500',
+                     '000001.SH': '上证指数',
+                     '930890.CSI':'主动股基',
+                     'H30265.CSI':'进取股基',
+                     '930892.CSI':'普通混基',
+                     '930950.CSI':'偏股基金',
+                     'H11022.CSI':'混合基金',
+                     'H11021.CSI':'股票基金',
+                     '930893.CSI':'灵活混基',
+                     '930891.CSI':'被动股基',
+                     '930889.CSI':'ETF市价',
+                     'H11024.CSI':'ETF基金',
+                     '931153.CSI':'FOF基金',
+                     '930898.CSI':'转债债基',
+                     'H11020.CSI':'中证基金',
+                     '000011.SH':'上证基金指数',
+                     'H11026.CSI':'QDII基金',
+                     '930897.CSI':'非纯债基',
+                     'H30264.CSI':'稳健股基',
+                     'H11023.CSI':'债券基金',
+                     '930610.CSI':'普通债基',
+                     'H11025.CSI':'货币基金',
+                     '930895.CSI':'定开债基',
+                     '930609.CSI':'纯债债基',
+                     '399306.SZ':'深证ETF',
+                     '399103.SZ':'乐富指数',
+                     '399380.SZ':'国证ETF',
+                     '399379.SZ':'国证基金',
+                     'CN6070.CNI':'中国股基指数',
+                     'CN6072.CNI':'中国债基指数',
+                     'CN6071.CNI':'中国混基指数'
                      }
 
     if not os.path.exists(os.path.join(index_path, 'index_price_monthly.csv')):
@@ -317,7 +374,7 @@ def update_index_data_monthly():
     #     print('月度数据尚未更新，自动退出')
     #     return None
 
-    res_df = w.wsd("881001.WI,000300.SH,000016.SH,000905.SH", "close", st_dt.strftime('%Y-%m-%d'),
+    res_df = w.wsd("881001.WI,000300.SH,000016.SH,000905.SH,000001.SH,930890.CSI,H30265.CSI,930892.CSI,930950.CSI,H11022.CSI,H11021.CSI,930893.CSI,930891.CSI,930889.CSI,H11024.CSI,931153.CSI,930898.CSI,H11020.CSI,000011.SH,H11026.CSI,930897.CSI,H30264.CSI,H11023.CSI,930610.CSI,H11025.CSI,930895.CSI,930609.CSI,399306.SZ,399103.SZ,399380.SZ,399379.SZ,CN6070.CNI,CN6072.CNI,CN6071.CNI", "close", st_dt.strftime('%Y-%m-%d'),
                    ed_dt.strftime('%Y-%m-%d'), "Period=M", usedf=True)
     res_df = res_df[1]
 
@@ -443,7 +500,7 @@ def update_monthly_macro_data():
 def update_industry_data():
     w.start()
     data = Data()
-    index_path = os.path.join(data_dair, 'index')
+    index_path = os.path.join(date_dair, 'index')
     try:
         indus_p = data.industry_price_monthly
         st = indus_p.index[-1] - timedelta(90)
@@ -475,16 +532,21 @@ def update_industry_data():
 
 # w.wsd("000001.SZ", "west_netprofit_YOY", "2020-07-08", "2020-08-06", "Period=M")
 
-def update_f_data_from_wind(special_year=2015):
-    path = os.path.join(data_dair, 'download_from_juyuan')
+def update_f_data_from_wind(special_year=''):
+    #special_year=2020为括号中的可选参数
+    #常规情况下应该填充为空值，避免触发下述if条件
+    path = os.path.join(date_dair, 'download_from_juyuan')
     w.start()
     data = Data()
     stock_basic_inform = data.stock_basic_inform
 
     mes = generate_months_ends()
 
-    iterms = [# StructWind('rd_exp', 'Q', 'unit=1;rptType=1;Days=Alldays'),
-              StructWind('west_netprofit_YOY', 'M')
+    iterms = [
+    #StructWind('rd_exp', 'Q', 'unit=1;rptType=1;Days=Alldays'),
+    #StructWind('west_netprofit_YOY', 'M'),
+    #StructWind('holder_num', 'M'),
+    StructWind('holder_num','Q'),
              ]
 
     codes_str = ''
@@ -499,7 +561,7 @@ def update_f_data_from_wind(special_year=2015):
         period = it.period
         other = it.other
         try:
-            tmp_df = eval('data.'+name.lower())
+            tmp_df = eval('data.'+name)
             tds = tmp_df.columns[-1].strftime("%Y-%m-%d")
         except Exception as e:
             tmp_df = pd.DataFrame()
@@ -511,28 +573,26 @@ def update_f_data_from_wind(special_year=2015):
         else:
             oth = 'Period=' + period
 
-        if special_year:     # = 2019
-            mes0 = [m for m in mes if m.year == special_year]
-            tds = mes0[0].strftime("%Y-%m-%d")
-            eds = mes0[-1].strftime("%Y-%m-%d")
-
-        if not special_year and period == 'Q' and (datetime.today() - tds).days < 110:
-            continue
-        elif not special_year and period == 'M' and (datetime.today() - tds).days < 20:
-            continue
+        # if special_year:     # = 2019
+        #     mes0 = [m for m in mes if m.year == special_year]
+        #     tds = mes0[0].strftime("%Y-%m-%d")
+        #     eds = mes0[-1].strftime("%Y-%m-%d")
+        #
+        # if not special_year and period == 'Q' and (datetime.today() - tds).days < 110:
+        #     continue
+        # elif not special_year and period == 'M' and (datetime.today() - tds).days < 20:
+        #     continue
 
         res_tmp = w.wsd(codes_str, name, tds, eds, oth,
                         usedf=True)
         res_tmp1 = res_tmp[1]
         res_tmp1 = res_tmp1.T
         tmp_df = pd.concat([tmp_df, res_tmp1], axis=1)
-        # 读取本地数据时和Wind提取数据时的时间格式可能不一样，统一一下才能排序
-        tmp_df.columns = pd.to_datetime(tmp_df.columns)
         # 把columns排序
         tt = list(tmp_df.columns)
         tt.sort()
         tmp_df = tmp_df[tt]
-        data.save(tmp_df, name.lower(), save_path=path)
+        data.save(tmp_df, name, save_path=path)
 
 
 def update_index_wei():
@@ -568,14 +628,21 @@ def update_index_wei():
         to_add = pd.DataFrame({m: res['i_weight']})
         zz500_wt = pd.concat([zz500_wt, to_add], axis=1)
 
-    data.save(hs300_wt, 'hs300_wt', save_path=os.path.join(data_dair, 'index'))
-    data.save(zz500_wt, 'zz500_wt', save_path=os.path.join(data_dair, 'index'))
+    data.save(hs300_wt, 'hs300_wt', save_path=os.path.join(date_dair, 'index'))
+    data.save(zz500_wt, 'zz500_wt', save_path=os.path.join(date_dair, 'index'))
+
+def get_fund_manager_initial_info():
+    w.start()
+    date_str = datetime.today().strftime('%Y-%m-%d')
+    all_fund_code=w.wset("sectorconstituent","date="+date_str+";sectorid=1000008492000000",usedf=True)[1].wind_code.tolist()      
+    pass
 
 
 if __name__ == '__main__':
 
     update_f_data_from_wind()
-
+    #update_index_data_monthly()
+    #update_index_data_daily()
     # update_stock_basic_inform()
     # update_stock_expect_infor()
 
@@ -590,5 +657,6 @@ if __name__ == '__main__':
     # form_stock2_first_indus(panel_path, save_path)
     # form_stock2_second_indus(panel_path, save_path)
     # form_panel2matrix(panel_path, save_path)
+
 
 

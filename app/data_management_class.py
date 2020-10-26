@@ -16,7 +16,7 @@ from utility.download_from_wind import update_index_data,  update_macro_data, up
     update_f_data_from_wind
 from app.行业多因子数据生成 import generate_indus_factor
 from factor_compute_and_update.factor_compute import Factor_Compute
-
+from utility.download_from_JoinQuant import *
 
 class Data_Management:
     """
@@ -29,6 +29,35 @@ class Data_Management:
         self.stock_basic_path = r'D:\pythoncode\IndexEnhancement\因子预处理模块\因子'
         self.industry_date_path = r'D:\pythoncode\IndexEnhancement\行业多因子\中信三级行业'
 
+    # 建立基金相关数据资源
+    def establish_fund_database(self,api='joinquant'):
+        if api=='jointquant':
+            get_all_fund()
+            get_all_open_fund()
+            get_all_etf()
+            get_all_lof()
+            get_all_fja()
+            get_all_fjb()
+            get_all_bond_fund()
+            get_all_stock_fund()
+            get_all_QDII_fund()
+            get_all_money_market_fund()
+            get_all_mixture_fund()
+            get_all_fund_info()
+            update_index_data()
+            get_shares_info()
+            get_main_info()
+            get_fund_net_value()
+            get_fund_portfolio_stock()
+            get_fund_portfolio()
+            get_fund_portfolio_bond()
+            get_fund_dividend()
+            get_fund_fin_indicator()            
+        elif api=='wind':
+            pass
+        else:
+            pass
+            
     # 更新股票基础行情数据
     def update_market_quote(self):
         # update_stock_basic_inform()
@@ -158,7 +187,8 @@ class Data_Management:
 
 if __name__ == "__main__":
     data_manage = Data_Management()
-    data_manage.update_market_quote()
-    # data_manage.add_factor_to_stock_dat()
+    #data_manage.update_market_quote()
+    #data_manage.add_factor_to_stock_dat()
+    data_manage.establish_fund_database(api='joinquant')
 
 
