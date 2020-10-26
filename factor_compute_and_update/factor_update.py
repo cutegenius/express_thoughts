@@ -6,6 +6,7 @@ import pandas as pd
 import re
 from datetime import datetime, time
 from utility.tool0 import Data
+from utility.constant import root_dair, data_dair
 
 
 class lazyproperty:
@@ -131,8 +132,8 @@ class Factor_Update:
     def get_basic_data(self, date):
         # code, name, ipo_date, industry_sw, MKT_CAP_FLOAT, is_open1, PCT_CHG_NM
         stock_basic = self.data.stock_basic_inform
-        mkt_cap_float = self.data.mkt_cap_float * 10000
-        pct_chg_nm = self.data.pct_chg_nm / 100
+        mkt_cap_float = self.data.MKT_CAP_FLOAT * 10000
+        pct_chg_nm = self.data.PCT_CHG_NM / 100
         res = stock_basic[['SEC_NAME', 'MKT', 'IPO_DATE', '中信一级行业', '申万一级行业', '申万二级行业']]
 
         res = self.concat_df(res, pd.DataFrame({'MKT_CAP_FLOAT': mkt_cap_float[date]}))
