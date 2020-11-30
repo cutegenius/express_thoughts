@@ -6,7 +6,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 from utility.relate_to_tushare import trade_days
-
+from utility.tool0 import Data, scaler
 
 # 调整财报数据日期到披露日期
 def adjust_months(d_df, orig='Q'):
@@ -174,3 +174,80 @@ def append_df(d_df, target_feq='M', fill_type='preceding'):
 
     return res_df
 
+
+def get_trade_days():
+    '''
+    获得基金经理指数的交易时间
+    '''
+    data=Data()
+    fund_manager_index=data.fund_manager_index
+    fund_manager_index.reset_index(inplace=True)
+    fund_manager_index.set_index(['manager_ID','manager','firstinvesttype'],inplace=True)
+    return fund_manager_index.columns.to_list()
+
+
+def get_fund_lst():
+    '''
+    获取基金列表
+    '''
+    data=Data()
+    adj_refactor_net_value=data.adj_refactor_net_value
+    return adj_refactor_net_value.index.to_list()
+    
+    
+    
+def cut_data(t):
+    '''
+    用来切掉基金经理未任职期间的数据
+    '''
+    #t=df_temp.iloc[0]
+    if (isinstance(t.start_date_vaild,pd._libs.tslibs.nattype.NaTType))and(isinstance(t.end_date,pd._libs.tslibs.nattype.NaTType)):
+        for ele in t.index.values:
+            if isinstance(ele,pd._libs.tslibs.timestamps.Timestamp):
+                t[ele]=np.nan
+        return t
+    elif (isinstance(t.start_date_vaild,pd._libs.tslibs.timestamps.Timestamp)) and (isinstance(t.end_date,pd._libs.tslibs.nattype.NaTType)):
+        if t.start_date_vaild<t.index.values[11]:
+            return t
+        elif t.start_date_vaild>t.index.values[-1]:
+            for ele in t.index.values:
+                if isinstance(ele,pd._libs.tslibs.timestamps.Timestamp):
+                   t[ele]=np.nan
+            return t
+        elif (t.start_date_vaild<=t.index.values[-1]) and (t.start_date_vaild>=t.index.values[11]):
+            for ele in t.index.values:
+                if isinstance(ele,pd._libs.tslibs.timestamps.Timestamp):
+                    if ele<t.start_date_vaild:
+                        t[ele]=np.nan
+            return t
+    elif (isinstance(t.start_date_vaild,pd._libs.tslibs.timestamps.Timestamp)) and (isinstance(t.end_date,pd._libs.tslibs.timestamps.Timestamp)):
+        if (t.start_date_vaild<t.index.values[11]) and (t.end_date<t.index.values[11]):
+            for ele in t.index.values:
+                if isinstance(ele,pd._libs.tslibs.timestamps.Timestamp):
+                   t[ele]=np.nan
+            return t
+        elif (t.start_date_vaild<t.index.values[11]) and (t.end_date>=t.index.values[11]) and (t.end_date<t.index.values[-1]):
+            for ele in t.index.values:
+                if isinstance(ele,pd._libs.tslibs.timestamps.Timestamp):
+                   if ele>t.end_date:
+                       t[ele]=np.nan
+            return t
+        elif (t.start_date_vaild<t.index.values[11]) and (t.end_date>=t.index.values[-1]):
+            return t
+        elif (t.start_date_vaild>=t.index.values[11]) and (t.start_date_vaild<=t.index.values[-1]) and (t.end_date>=t.index.values[11]) and (t.end_date<=t.index.values[-1]):
+            for ele in t.index.values:
+                if isinstance(ele,pd._libs.tslibs.timestamps.Timestamp):
+                   if ele<t.start_date_vaild or ele>t.end_date:
+                       t[ele]=np.nan
+            return t
+        elif (t.start_date_vaild>=t.index.values[11]) and (t.start_date_vaild<=t.index.values[-1]) and (t.end_date>=t.index.values[-1]):
+            for ele in t.index.values:
+                if isinstance(ele,pd._libs.tslibs.timestamps.Timestamp):
+                   if ele<t.start_date_vaild:
+                       t[ele]=np.nan
+            return t
+        elif (t.start_date_vaild>=t.index.values[-1]) and (t.end_date>=t.index.values[-1]):
+            for ele in t.index.values:
+                if isinstance(ele,pd._libs.tslibs.timestamps.Timestamp):
+                    t[ele]=np.nan
+            return t

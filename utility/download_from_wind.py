@@ -637,6 +637,19 @@ def get_fund_manager_initial_info():
     all_fund_code=w.wset("sectorconstituent","date="+date_str+";sectorid=1000008492000000",usedf=True)[1].wind_code.tolist()      
     pass
 
+#todo fund_fee目前手动提取，qanal_totalincome目前手动提取
+def get_fund_data():
+    w.start()
+    fund_lst=tool3.get_fund_lst()
+    fund_fee=pd.DataFrame()
+    for code in range(len(fund_lst)):
+        res=w.wss(fund_lst[code], "fund_custodianfeeratio,fund_managementfeeratio,fund_purchasefeeratio",usedf=True)[1]
+        fund_fee=pd.concat([fund_fee, res], axis=0)
+    w.stop()
+    data.save(fund_fee, 'fund_fee', save_path=os.path.join(date_dair, 'fund', 'download_from_wind'))
+
+
+
 
 if __name__ == '__main__':
 

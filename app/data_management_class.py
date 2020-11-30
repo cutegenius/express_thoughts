@@ -52,7 +52,8 @@ class Data_Management:
             get_fund_portfolio()
             get_fund_portfolio_bond()
             get_fund_dividend()
-            get_fund_fin_indicator()            
+            get_fund_fin_indicator()
+
         elif api=='wind':
             pass
         else:

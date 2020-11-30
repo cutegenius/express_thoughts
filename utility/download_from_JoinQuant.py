@@ -564,3 +564,8 @@ def get_fund_fin_indicator():
     nav.to_csv(os.path.join(basic_path, 'nav.csv'), encoding='gbk')
 
     
+
+
+
+
+

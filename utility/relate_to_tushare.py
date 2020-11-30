@@ -865,7 +865,7 @@ def establish_fund_data():
 
 
 if __name__ == '__main__':
-    establish_fund_data()
+    #establish_fund_data()
     #compute_month_value()
     #update_futmap()
 
@@ -878,4 +878,5 @@ if __name__ == '__main__':
 
     #update_adj_factor()
     #trade_days(freq='w')
-
+    #update_daily_basic()
+    pass

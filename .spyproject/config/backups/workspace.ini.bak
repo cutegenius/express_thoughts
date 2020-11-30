@@ -1,0 +1,10 @@
+[workspace]
+restore_data_on_startup = True
+save_data_on_exit = True
+save_history = True
+save_non_project_files = False
+
+[main]
+version = 0.2.0
+recent_files = ['fund_compute_and_update\\fund_compute.py', 'factor_compute_and_update\\factor_compute.py', 'utility\\relate_to_tushare.py', 'app\\data_management_class.py', 'utility\\download_from_JoinQuant.py', 'utility\\download_from_wind.py', 'utility\\tool3.py']
+
