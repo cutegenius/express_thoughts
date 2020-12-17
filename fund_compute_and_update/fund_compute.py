@@ -3,7 +3,7 @@
 #import os
 #from itertools import chain
 #from functools import reduce
-#from pyfinance.ols import PandasRollingOLS as rolling_ols
+from pyfinance.ols import PandasRollingOLS as rolling_ols
 #from pandas.core.window import ewm
 #from tushare.stock.indictor import macd
 import copy
@@ -24,6 +24,14 @@ from utility.tool1 import CALFUNC, _calculate_su_simple, parallelcal,  lazyprope
     get_signal_season_value, get_fill_vals, linear_interpolate, get_season_mean_value
 from sqlalchemy import create_engine
 import pymysql
+import empyrical
+import statsmodels.api as sm
+from sklearn.linear_model import LinearRegression
+from scipy.interpolate import interp1d
+from utility.relate_to_tushare import trade_days
+#For simplicity, we will assume a risk-free rate of 0% and target return of 0%.
+
+
 
 
 token_path2 = r'D:\文档\OneDrive\earning money\入职后资料\token_mysql.txt'
@@ -39,6 +47,10 @@ try:
     basic_path = os.path.join(date_dair, 'fund', 'factor_data')
 except Exception as e:
     basic_path = os.path.join(date_dair, 'fund', 'factor_data')
+
+
+
+
 
 
 class Factor_Compute(CALFUNC):
@@ -294,7 +306,6 @@ class Factor_Compute(CALFUNC):
         fund_manager_collection.reset_index(inplace=True)
         fund_manager_collection.drop_duplicates(subset='manager_ID',inplace=True)
         fund_manager_collection.set_index('manager_ID',inplace=True)
-
         tds=tool3.get_trade_days()
         fund_manager_sex=fund_manager_collection['gender']
         gender_dict={'男':1,'女':0}
@@ -654,9 +665,9 @@ class Factor_Compute(CALFUNC):
     @lazyproperty
     def FUND_MANAGER_CUSTODIANFEERATIO(self):
         #托管费率
-        #data=Data()
-        #fund_fee=data.fund_fee
-        fund_fee=self.fund_fee
+        data=Data()
+        fund_fee=data.fund_fee
+        #fund_fee=self.fund_fee
         fund_custodianfeeratio= fund_fee['FUND_CUSTODIANFEERATIO']
         tds=tool3.get_trade_days()
         fund_custodianfeeratio=pd.DataFrame(np.array([fund_custodianfeeratio]).repeat(len(tds), axis=0)).T
@@ -677,6 +688,8 @@ class Factor_Compute(CALFUNC):
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_custodianfeeratio = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
         #fund_manager_custodianfeeratio.to_excel(os.path.join(basic_path, 'fund_manager_custodianfeeratio.xlsx'))
+
+        
         return fund_manager_custodianfeeratio
 
 
@@ -684,9 +697,9 @@ class Factor_Compute(CALFUNC):
     @lazyproperty
     def FUND_MANAGER_MANAGEMENTFEERATIO(self):
         #管理费
-        #data=Data()
-        #fund_fee=data.fund_fee
-        fund_fee=self.fund_fee
+        data=Data()
+        fund_fee=data.fund_fee
+        #fund_fee=self.fund_fee
         fund_managementfeeratio= fund_fee['FUND_MANAGEMENTFEERATIO']
         tds=tool3.get_trade_days()
         fund_managementfeeratio=pd.DataFrame(np.array([fund_managementfeeratio]).repeat(len(tds), axis=0)).T
@@ -706,7 +719,9 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,fund_managementfeeratio,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_managementfeeratio = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+
         #fund_manager_managementfeeratio.to_excel(os.path.join(basic_path, 'fund_manager_managementfeeratio.xlsx'))
+
         return fund_manager_managementfeeratio
 
 
@@ -714,9 +729,9 @@ class Factor_Compute(CALFUNC):
     @lazyproperty
     def FUND_MANAGER_PURCHASEFEERATIO(self):
         #最高申购费
-        #data=Data()
-        #fund_fee=data.fund_fee
-        fund_fee=self.fund_fee
+        data=Data()
+        fund_fee=data.fund_fee
+        #fund_fee=self.fund_fee
         fund_purchasefeeratio= fund_fee['FUND_PURCHASEFEERATIO']
         tds=tool3.get_trade_days()
         fund_purchasefeeratio=pd.DataFrame(np.array([fund_purchasefeeratio]).repeat(len(tds), axis=0)).T
@@ -736,18 +751,60 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,fund_purchasefeeratio,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_purchasefeeratio = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+
         #fund_manager_purchasefeeratio.to_excel(os.path.join(basic_path, 'fund_manager_purchasefeeratio.xlsx'))
         return fund_manager_purchasefeeratio
 
 
 
+# =============================================================================
+#     @lazyproperty
+#     def FUND_MANAGER_TNA(self):
+#         #基金经理最新季度的管理基金资产净值总和
+#         #data=Data()
+#         #total_tna=data.total_tna
+#         total_tna=self.total_tna
+#         total_tna.reset_index(inplace=True)
+#         fund_manager_detail=pd.read_excel(os.path.join(basic_path, 'fund_manager_detail.xlsx'),index_col=0)
+#         def as_datetime(x):
+#             if pd.isnull(x):
+#                 return x
+#             else:
+#                 x_date=datetime.strptime(str(x),'%Y-%m-%d')
+#                 return x_date
+#         fund_manager_detail['start_date']=fund_manager_detail['start_date'].apply(as_datetime)
+#         fund_manager_detail['start_date_vaild']=fund_manager_detail['start_date_vaild'].apply(as_datetime)
+#         fund_manager_detail['end_date']=fund_manager_detail['end_date'].apply(as_datetime)
+#         df_temp=pd.merge(fund_manager_detail,total_tna,left_on='wind_code',right_on='index',how='inner')
+#         df_temp=df_temp.apply(tool3.cut_data,axis=1)
+#         fund_manager_tna = df_temp.groupby('manager_ID').sum()
+#         #fund_manager_tna.to_excel(os.path.join(basic_path, 'fund_manager_tna.xlsx'))
+#         return fund_manager_tna
+# 
+# 
+# 
+#     @lazyproperty
+#     def FUND_MANAGER_TNA_GROWTHRATE(self):
+#         #基金经理最新季度的管理基金资产净值总和的年增长率
+#         #data=Data()
+#         #fund_manager_tna=data.fund_manager_tna
+#         fund_manager_tna=self.fund_manager_tna
+#         fund_manager_tna[fund_manager_tna==0]=np.nan
+#         fund_manager_tna_growthrate = fund_manager_tna/fund_manager_tna.shift(periods=4, axis=1)
+#         #fund_manager_tna_growthrate.to_excel(os.path.join(basic_path, 'fund_manager_tna_growthrate.xlsx'))
+#         return fund_manager_tna_growthrate
+# =============================================================================
+
+
+
+
     @lazyproperty
-    def FUND_MANAGER_TNA(self):
+    def FUND_MANAGER_PRT_FUNDNETASSET_TOTAL(self):
         #基金经理最新季度的管理基金资产净值总和
         #data=Data()
-        #total_tna=data.total_tna
-        total_tna=self.total_tna
-        total_tna.reset_index(inplace=True)
+        #prt_fundnetasset_total=data.prt_fundnetasset_total
+        prt_fundnetasset_total=self.prt_fundnetasset_total
+        prt_fundnetasset_total.reset_index(inplace=True)
         fund_manager_detail=pd.read_excel(os.path.join(basic_path, 'fund_manager_detail.xlsx'),index_col=0)
         def as_datetime(x):
             if pd.isnull(x):
@@ -758,24 +815,29 @@ class Factor_Compute(CALFUNC):
         fund_manager_detail['start_date']=fund_manager_detail['start_date'].apply(as_datetime)
         fund_manager_detail['start_date_vaild']=fund_manager_detail['start_date_vaild'].apply(as_datetime)
         fund_manager_detail['end_date']=fund_manager_detail['end_date'].apply(as_datetime)
-        df_temp=pd.merge(fund_manager_detail,total_tna,left_on='wind_code',right_on='index',how='inner')
+        df_temp=pd.merge(fund_manager_detail,prt_fundnetasset_total,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
-        fund_manager_tna = df_temp.groupby('manager_ID').sum()
-        #fund_manager_tna.to_excel(os.path.join(basic_path, 'fund_manager_tna.xlsx'))
-        return fund_manager_tna
+        fund_manager_prt_fundnetasset_total = df_temp.groupby('manager_ID').sum()
+        fund_manager_prt_fundnetasset_total[fund_manager_prt_fundnetasset_total==0]=np.nan
+        fund_manager_prt_fundnetasset_total=tool3.adjust_months(fund_manager_prt_fundnetasset_total)
+        fund_manager_prt_fundnetasset_total = tool3.append_df(fund_manager_prt_fundnetasset_total)
+        #fund_manager_prt_fundnetasset_total.to_excel(os.path.join(basic_path, 'fund_manager_prt_fundnetasset_total.xlsx'))
+        return fund_manager_prt_fundnetasset_total
 
 
 
     @lazyproperty
-    def FUND_MANAGER_TNA_GROWTHRATE(self):
+    def FUND_MANAGER_PRT_FUNDNETASSET_TOTAL_GROETHRATE(self):
         #基金经理最新季度的管理基金资产净值总和的年增长率
-        #data=Data()
-        #fund_manager_tna=data.fund_manager_tna
-        fund_manager_tna=self.fund_manager_tna
-        fund_manager_tna[fund_manager_tna==0]=np.nan
-        fund_manager_tna_growthrate = fund_manager_tna/fund_manager_tna.shift(periods=4, axis=1)
-        #fund_manager_tna_growthrate.to_excel(os.path.join(basic_path, 'fund_manager_tna_growthrate.xlsx'))
-        return fund_manager_tna_growthrate
+        data=Data()
+        fund_manager_prt_fundnetasset_total=data.fund_manager_prt_fundnetasset_total
+        fund_manager_prt_fundnetasset_total=self.fund_manager_prt_fundnetasset_total
+        fund_manager_prt_fundnetasset_total_growthrate= fund_manager_prt_fundnetasset_total/fund_manager_prt_fundnetasset_total.shift(periods=12, axis=1)-1
+        fund_manager_prt_fundnetasset_total_growthrate.to_excel(os.path.join(basic_path, 'fund_manager_prt_fundnetasset_total_growthrate.xlsx'))
+        return fund_manager_prt_fundnetasset_total_growthrate
+
+
+
 
 
 
@@ -799,6 +861,12 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,qanal_totalincome,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_qanal_totalincome = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        #fund_manager_qanal_totalincome=data.fund_manager_qanal_totalincome
+        #fund_manager_qanal_totalincome.reset_index(inplace=True)
+        #fund_manager_qanal_totalincome.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        fund_manager_qanal_totalincome=tool3.adjust_months(fund_manager_qanal_totalincome)
+        fund_manager_qanal_totalincome = tool3.append_df(fund_manager_qanal_totalincome)
         #fund_manager_qanal_totalincome.to_excel(os.path.join(basic_path, 'fund_manager_qanal_totalincome.xlsx'))
         return fund_manager_qanal_totalincome
 
@@ -823,6 +891,14 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,prt_totalasset,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_prt_totalasset = df_temp.groupby(['manager_ID', 'firstinvesttype']).sum()
+        
+        #fund_manager_prt_totalasset=data.fund_manager_prt_totalasset
+        #fund_manager_prt_totalasset.reset_index(inplace=True)
+        #fund_manager_prt_totalasset.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        fund_manager_prt_totalasset=tool3.adjust_months(fund_manager_prt_totalasset)
+        fund_manager_prt_totalasset = tool3.append_df(fund_manager_prt_totalasset)
+        fund_manager_prt_totalasset[fund_manager_prt_totalasset==0]=np.nan
+        
         #fund_manager_prt_totalasset.to_excel(os.path.join(basic_path, 'fund_manager_prt_totalasset.xlsx'))
         return fund_manager_prt_totalasset
 
@@ -847,6 +923,13 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,div_accumulatedperunit,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_div_accumulatedperunit = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        #fund_manager_div_accumulatedperunit=data.fund_manager_div_accumulatedperunit
+        #fund_manager_div_accumulatedperunit.reset_index(inplace=True)
+        #fund_manager_div_accumulatedperunit.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        fund_manager_div_accumulatedperunit=tool3.adjust_months(fund_manager_div_accumulatedperunit)
+        fund_manager_div_accumulatedperunit = tool3.append_df(fund_manager_div_accumulatedperunit)
+
         #fund_manager_div_accumulatedperunit.to_excel(os.path.join(basic_path, 'fund_manager_div_accumulatedperunit.xlsx'))
         return fund_manager_div_accumulatedperunit
 
@@ -872,6 +955,16 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,total_expense,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_total_expense = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        
+        #fund_manager_total_expense=data.fund_manager_total_expense
+        #fund_manager_total_expense.reset_index(inplace=True)
+        #fund_manager_total_expense.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        fund_manager_total_expense=tool3.adjust_months(fund_manager_total_expense,'H')
+        fund_manager_total_expense = tool3.append_df(fund_manager_total_expense)
+
+        
+        
         #fund_manager_total_expense.to_excel(os.path.join(basic_path, 'fund_manager_total_expense.xlsx'))
         return fund_manager_total_expense
 
@@ -881,9 +974,9 @@ class Factor_Compute(CALFUNC):
     @lazyproperty
     def FUND_MANAGER_1Y_DIV_PAYOUT(self):
         #基金经理在管基金近一年年度分红总额的简单平均
-        #data=Data()
-        #div_payout=data.div_payout
-        div_payout=self.div_payout
+        data=Data()
+        div_payout=data.div_payout
+        #div_payout=self.div_payout
         div_payout.reset_index(inplace=True)
         fund_manager_detail=pd.read_excel(os.path.join(basic_path, 'fund_manager_detail.xlsx'),index_col=0)
         def as_datetime(x):
@@ -898,6 +991,13 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,div_payout,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_1y_div_payout = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        #fund_manager_1y_div_payout=data.fund_manager_1y_div_payout
+        #fund_manager_1y_div_payout.reset_index(inplace=True)
+        #fund_manager_1y_div_payout.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        fund_manager_1y_div_payout=tool3.adjust_months(fund_manager_1y_div_payout,'Y')
+        fund_manager_1y_div_payout = tool3.append_df(fund_manager_1y_div_payout)
+        
         fund_manager_1y_div_payout = CALFUNC.del_dat_early_than(fund_manager_1y_div_payout, START_YEAR)
         #fund_manager_1y_div_payout.to_excel(os.path.join(basic_path, 'fund_manager_1y_div_payout.xlsx'))
         return fund_manager_1y_div_payout
@@ -907,9 +1007,9 @@ class Factor_Compute(CALFUNC):
     @lazyproperty
     def FUND_MANAGER_3Y_DIV_PAYOUT(self):
         #基金经理在管基金近三年年度分红总额的简单平均
-        #data=Data()
-        #div_payout=data.div_payout
-        div_payout=self.div_payout
+        data=Data()
+        div_payout=data.div_payout
+        #div_payout=self.div_payout
         div_payout.fillna(value=0, inplace=True)
         div_payout_3y=div_payout+div_payout.shift(periods=1, axis=1)+div_payout.shift(periods=2, axis=1)
         div_payout_3y.reset_index(inplace=True)
@@ -926,9 +1026,13 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,div_payout_3y,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_3y_div_payout = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+    
+        fund_manager_3y_div_payout=tool3.adjust_months(fund_manager_3y_div_payout,'Y')
+        fund_manager_3y_div_payout = tool3.append_df(fund_manager_3y_div_payout)
+        
         fund_manager_3y_div_payout = CALFUNC.del_dat_early_than(fund_manager_3y_div_payout, START_YEAR)
         #fund_manager_3y_div_payout.to_excel(os.path.join(basic_path, 'fund_manager_3y_div_payout.xlsx'))
-        return fund_manager_5y_div_payout
+        return fund_manager_3y_div_payout
 
 
     @lazyproperty
@@ -953,6 +1057,11 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,div_payout_5y,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_5y_div_payout = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_5y_div_payout=tool3.adjust_months(fund_manager_5y_div_payout,'Y')
+        fund_manager_5y_div_payout = tool3.append_df(fund_manager_5y_div_payout)
+        
+        
         fund_manager_5y_div_payout = CALFUNC.del_dat_early_than(fund_manager_5y_div_payout, START_YEAR)
         #fund_manager_5y_div_payout.to_excel(os.path.join(basic_path, 'fund_manager_5y_div_payout.xlsx'))
         return fund_manager_5y_div_payout
@@ -962,9 +1071,9 @@ class Factor_Compute(CALFUNC):
     @lazyproperty
     def FUND_MANAGER_1Y_return(self):
         #基金经理在管基金近一年年度回报的简单平均
-        #data=Data()
-        #return_y=data.return_y
-        return_y=self.return_y
+        data=Data()
+        return_y=data.return_y
+        #return_y=self.return_y
         return_y.reset_index(inplace=True)
         fund_manager_detail=pd.read_excel(os.path.join(basic_path, 'fund_manager_detail.xlsx'),index_col=0)
         def as_datetime(x):
@@ -979,6 +1088,10 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,return_y,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_1y_return = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_1y_return=tool3.adjust_months(fund_manager_1y_return,'Y')
+        fund_manager_1y_return = tool3.append_df(fund_manager_1y_return)
+        
         fund_manager_1y_return = CALFUNC.del_dat_early_than(fund_manager_1y_return, START_YEAR)
         #fund_manager_1y_return.to_excel(os.path.join(basic_path, 'fund_manager_1y_return.xlsx'))
         return fund_manager_1y_return
@@ -988,9 +1101,9 @@ class Factor_Compute(CALFUNC):
     @lazyproperty
     def FUND_MANAGER_3Y_return(self):
         #基金经理在管基金近三年年度回报的简单平均
-        #data=Data()
-        #return_y=data.return_y
-        return_y=self.return_y
+        data=Data()
+        return_y=data.return_y
+        #return_y=self.return_y
         return_3y=return_y+return_y.shift(periods=1, axis=1)+return_y.shift(periods=2, axis=1)
         return_3y.reset_index(inplace=True)
         fund_manager_detail=pd.read_excel(os.path.join(basic_path, 'fund_manager_detail.xlsx'),index_col=0)
@@ -1006,6 +1119,10 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,return_3y,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_3y_return = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_3y_return=tool3.adjust_months(fund_manager_3y_return,'Y')
+        fund_manager_3y_return = tool3.append_df(fund_manager_3y_return)
+        
         fund_manager_3y_return = CALFUNC.del_dat_early_than(fund_manager_3y_return, START_YEAR)
         #fund_manager_3y_return.to_excel(os.path.join(basic_path, 'fund_manager_3y_return.xlsx'))
         return fund_manager_3y_return
@@ -1015,9 +1132,9 @@ class Factor_Compute(CALFUNC):
     @lazyproperty
     def FUND_MANAGER_5Y_return(self):
         #基金经理在管基金近五年年度回报的简单平均
-        #data=Data()
-        #return_y=data.return_y
-        return_y=self.return_y
+        data=Data()
+        return_y=data.return_y
+        #return_y=self.return_y
         return_5y=return_y+return_y.shift(periods=1, axis=1)+return_y.shift(periods=2, axis=1)+return_y.shift(periods=3, axis=1)+return_y.shift(periods=4, axis=1)
         return_5y.reset_index(inplace=True)
         fund_manager_detail=pd.read_excel(os.path.join(basic_path, 'fund_manager_detail.xlsx'),index_col=0)
@@ -1033,6 +1150,10 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,return_5y,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_5y_return = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_5y_return=tool3.adjust_months(fund_manager_5y_return,'Y')
+        fund_manager_5y_return = tool3.append_df(fund_manager_5y_return)
+        
         fund_manager_5y_return = CALFUNC.del_dat_early_than(fund_manager_5y_return, START_YEAR)
         #fund_manager_5y_return.to_excel(os.path.join(basic_path, 'fund_manager_5y_return.xlsx'))
         return fund_manager_5y_return
@@ -1042,9 +1163,9 @@ class Factor_Compute(CALFUNC):
     @lazyproperty
     def FUND_MANAGER_1Y_PERIODRETURNRANKING(self):
         #基金经理单年度回报排名的简单平均
-        #data=Data()
-        #periodreturnranking_y=data.periodreturnranking_y
-        periodreturnranking_y=self.periodreturnranking_y
+        data=Data()
+        periodreturnranking_y=data.periodreturnranking_y
+        #periodreturnranking_y=self.periodreturnranking_y
         def str2float(s):
             if pd.isnull(s):
                 return s
@@ -1066,6 +1187,10 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,periodreturnranking_y_float,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_1y_periodreturnranking = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_1y_periodreturnranking=tool3.adjust_months(fund_manager_1y_periodreturnranking,'Y')
+        fund_manager_1y_periodreturnranking = tool3.append_df(fund_manager_1y_periodreturnranking)
+        
         fund_manager_1y_periodreturnranking = CALFUNC.del_dat_early_than(fund_manager_1y_periodreturnranking, START_YEAR)
         #fund_manager_1y_periodreturnranking.to_excel(os.path.join(basic_path, 'fund_manager_1y_periodreturnranking.xlsx'))
         return fund_manager_1y_periodreturnranking
@@ -1074,9 +1199,9 @@ class Factor_Compute(CALFUNC):
     @lazyproperty
     def FUND_MANAGER_1Y_PERIODRETURNRANKING_TYPE(self):
         #基金经理单年度回报排名的简单平均在各自类型中的排名
-        #data=Data()
-        #fund_manager_1y_periodreturnranking=data.fund_manager_1y_periodreturnranking
-        fund_manager_1y_periodreturnranking=self.fund_manager_1y_periodreturnranking
+        data=Data()
+        fund_manager_1y_periodreturnranking=data.fund_manager_1y_periodreturnranking
+        #fund_manager_1y_periodreturnranking=self.fund_manager_1y_periodreturnranking
         fund_manager_1y_periodreturnranking_type=fund_manager_1y_periodreturnranking.groupby('manager_ID').rank(ascending=True)
         #fund_manager_1y_periodreturnranking_type.to_excel(os.path.join(basic_path, 'fund_manager_1y_periodreturnranking_type.xlsx'))
         return fund_manager_1y_periodreturnranking_type
@@ -1102,6 +1227,11 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,style_stylecoefficient,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_style_stylecoefficient = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_style_stylecoefficient=tool3.adjust_months(fund_manager_style_stylecoefficient,'H')
+        fund_manager_style_stylecoefficient = tool3.append_df(fund_manager_style_stylecoefficient)
+        
+        
         fund_manager_style_stylecoefficient = CALFUNC.del_dat_early_than(fund_manager_style_stylecoefficient, START_YEAR)
         #fund_manager_style_stylecoefficient.to_excel(os.path.join(basic_path, 'fund_manager_style_stylecoefficient.xlsx'))
         return fund_manager_style_stylecoefficient
@@ -1128,6 +1258,11 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,style_averagepositiontime,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_style_averagepositiontime = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_style_averagepositiontime=tool3.adjust_months(fund_manager_style_averagepositiontime,'Y')
+        fund_manager_style_averagepositiontime = tool3.append_df(fund_manager_style_averagepositiontime)
+        
+        
         fund_manager_style_averagepositiontime = CALFUNC.del_dat_early_than(fund_manager_style_averagepositiontime, START_YEAR)
         #fund_manager_style_averagepositiontime.to_excel(os.path.join(basic_path, 'fund_manager_style_averagepositiontime.xlsx'))
         return fund_manager_style_averagepositiontime
@@ -1138,9 +1273,9 @@ class Factor_Compute(CALFUNC):
     @lazyproperty
     def FUND_MANAGER_PRT_HKSTOCKTONAV(self):
         #基金经理在管基金港股投资市值占基金资产净值比的简单平均
-        #data=Data()
-        #prt_hkstocktonav=data.prt_hkstocktonav
-        prt_hkstocktonav=self.prt_hkstocktonav
+        data=Data()
+        prt_hkstocktonav=data.prt_hkstocktonav
+        #prt_hkstocktonav=self.prt_hkstocktonav
         prt_hkstocktonav.fillna(value=0, inplace=True)
         prt_hkstocktonav.reset_index(inplace=True)
         fund_manager_detail=pd.read_excel(os.path.join(basic_path, 'fund_manager_detail.xlsx'),index_col=0)
@@ -1156,6 +1291,11 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,prt_hkstocktonav,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_prt_hkstocktonav = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_prt_hkstocktonav=tool3.adjust_months(fund_manager_prt_hkstocktonav,'Q')
+        fund_manager_prt_hkstocktonav = tool3.append_df(fund_manager_prt_hkstocktonav)
+        
+        
         fund_manager_prt_hkstocktonav = CALFUNC.del_dat_early_than(fund_manager_prt_hkstocktonav, START_YEAR)
         #fund_manager_prt_hkstocktonav.to_excel(os.path.join(basic_path, 'fund_manager_prt_hkstocktonav.xlsx'))
         return fund_manager_prt_hkstocktonav
@@ -1183,6 +1323,10 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,prt_stocktonav,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_prt_stocktonav = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_prt_stocktonav=tool3.adjust_months(fund_manager_prt_stocktonav,'Q')
+        fund_manager_prt_stocktonav = tool3.append_df(fund_manager_prt_stocktonav)
+        
         fund_manager_prt_stocktonav = CALFUNC.del_dat_early_than(fund_manager_prt_stocktonav, START_YEAR)
         #fund_manager_prt_stocktonav.to_excel(os.path.join(basic_path, 'fund_manager_prt_stocktonav.xlsx'))
         return fund_manager_prt_stocktonav
@@ -1196,9 +1340,9 @@ class Factor_Compute(CALFUNC):
         '''
         此指标的原数据仅有数据浏览器手动可以提取目前
         '''
-        #data=Data()
-        #prt_fundnoofsecurities=data.prt_fundnoofsecurities
-        prt_fundnoofsecurities=self.prt_fundnoofsecurities
+        data=Data()
+        prt_fundnoofsecurities=data.prt_fundnoofsecurities
+        #prt_fundnoofsecurities=self.prt_fundnoofsecurities
         prt_fundnoofsecurities.reset_index(inplace=True)
         fund_manager_detail=pd.read_excel(os.path.join(basic_path, 'fund_manager_detail.xlsx'),index_col=0)
         def as_datetime(x):
@@ -1213,6 +1357,10 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,prt_fundnoofsecurities,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_prt_fundnoofsecurities = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_prt_fundnoofsecurities=tool3.adjust_months(fund_manager_prt_fundnoofsecurities,'Q')
+        fund_manager_prt_fundnoofsecurities = tool3.append_df(fund_manager_prt_fundnoofsecurities)
+        
         fund_manager_prt_fundnoofsecurities = CALFUNC.del_dat_early_than(fund_manager_prt_fundnoofsecurities, START_YEAR)
         #fund_manager_prt_fundnoofsecurities.to_excel(os.path.join(basic_path, 'fund_manager_prt_fundnoofsecurities.xlsx'))
         return fund_manager_prt_fundnoofsecurities
@@ -1222,9 +1370,9 @@ class Factor_Compute(CALFUNC):
     @lazyproperty
     def FUND_MANAGER_PRT_CORPORATEBONDTOBOND(self):
         #基金经理在管基金企业发行债券市值占债券投资市值比的简单平均
-        #data=Data()
-        #prt_corporatebondtobond=data.prt_corporatebondtobond
-        prt_corporatebondtobond=self.prt_corporatebondtobond
+        data=Data()
+        prt_corporatebondtobond=data.prt_corporatebondtobond
+        #prt_corporatebondtobond=self.prt_corporatebondtobond
         prt_corporatebondtobond.reset_index(inplace=True)
         fund_manager_detail=pd.read_excel(os.path.join(basic_path, 'fund_manager_detail.xlsx'),index_col=0)
         def as_datetime(x):
@@ -1239,6 +1387,11 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,prt_corporatebondtobond,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_prt_corporatebondtobond = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_prt_corporatebondtobond=tool3.adjust_months(fund_manager_prt_corporatebondtobond,'Q')
+        fund_manager_prt_corporatebondtobond = tool3.append_df(fund_manager_prt_corporatebondtobond)
+        
+        
         fund_manager_prt_corporatebondtobond = CALFUNC.del_dat_early_than(fund_manager_prt_corporatebondtobond, START_YEAR)
         #fund_manager_prt_corporatebondtobond.to_excel(os.path.join(basic_path, 'fund_manager_prt_corporatebondtobond.xlsx'))
         return fund_manager_prt_corporatebondtobond
@@ -1278,9 +1431,9 @@ class Factor_Compute(CALFUNC):
         '''
         此指标的原数据仅有数据浏览器手动可以提取目前
         '''
-        #data=Data()
-        #prt_topsectosec=data.prt_topsectosec
-        prt_topsectosec=self.prt_topsectosec
+        data=Data()
+        prt_topsectosec=data.prt_topsectosec
+        #prt_topsectosec=self.prt_topsectosec
         prt_topsectosec.reset_index(inplace=True)
         fund_manager_detail=pd.read_excel(os.path.join(basic_path, 'fund_manager_detail.xlsx'),index_col=0)
         def as_datetime(x):
@@ -1295,6 +1448,11 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,prt_topsectosec,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_prt_topsectosec = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_prt_topsectosec=tool3.adjust_months(fund_manager_prt_topsectosec,'Q')
+        fund_manager_prt_topsectosec = tool3.append_df(fund_manager_prt_topsectosec)
+        
+        
         fund_manager_prt_topsectosec = CALFUNC.del_dat_early_than(fund_manager_prt_topsectosec, START_YEAR)
         #fund_manager_prt_topsectosec.to_excel(os.path.join(basic_path, 'fund_manager_prt_topsectosec.xlsx'))
         return fund_manager_prt_topsectosec
@@ -1304,9 +1462,9 @@ class Factor_Compute(CALFUNC):
     @lazyproperty
     def FUND_MANAGER_HOLDER_MNGEMP_HOLDINGPCT(self):
         #基金经理在管基金管理人员工持有比例的简单平均
-        #data=Data()
-        #holder_mngemp_holdingpct=data.holder_mngemp_holdingpct
-        holder_mngemp_holdingpct=self.holder_mngemp_holdingpct
+        data=Data()
+        holder_mngemp_holdingpct=data.holder_mngemp_holdingpct
+        #holder_mngemp_holdingpct=self.holder_mngemp_holdingpct
         holder_mngemp_holdingpct.reset_index(inplace=True)
         fund_manager_detail=pd.read_excel(os.path.join(basic_path, 'fund_manager_detail.xlsx'),index_col=0)
         def as_datetime(x):
@@ -1321,6 +1479,11 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,holder_mngemp_holdingpct,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_holder_mngemp_holdingpct = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_holder_mngemp_holdingpct=tool3.adjust_months(fund_manager_holder_mngemp_holdingpct,'H')
+        fund_manager_holder_mngemp_holdingpct = tool3.append_df(fund_manager_holder_mngemp_holdingpct)
+        
+        
         fund_manager_holder_mngemp_holdingpct = CALFUNC.del_dat_early_than(fund_manager_holder_mngemp_holdingpct, START_YEAR)
         #fund_manager_holder_mngemp_holdingpct.to_excel(os.path.join(basic_path, 'fund_manager_holder_mngemp_holdingpct.xlsx'))
         return fund_manager_holder_mngemp_holdingpct
@@ -1330,9 +1493,9 @@ class Factor_Compute(CALFUNC):
     @lazyproperty
     def FUND_MANAGER_FUND_CORP_TEAMSTABILITY(self):
         #基金公司团队稳定性
-        #data=Data()
-        #fund_corp_teamstability=data.fund_corp_teamstability
-        fund_corp_teamstability=self.fund_corp_teamstability
+        data=Data()
+        fund_corp_teamstability=data.fund_corp_teamstability
+        #fund_corp_teamstability=self.fund_corp_teamstability
         fund_corp_teamstability.reset_index(inplace=True)
         fund_manager_detail=pd.read_excel(os.path.join(basic_path, 'fund_manager_detail.xlsx'),index_col=0)
         def as_datetime(x):
@@ -1347,6 +1510,11 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,fund_corp_teamstability,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_fund_corp_teamstability = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_fund_corp_teamstability=tool3.adjust_months(fund_manager_fund_corp_teamstability,'Y')
+        fund_manager_fund_corp_teamstability = tool3.append_df(fund_manager_fund_corp_teamstability)
+        
+        
         fund_manager_fund_corp_teamstability = CALFUNC.del_dat_early_than(fund_manager_fund_corp_teamstability, START_YEAR)
         #fund_manager_fund_corp_teamstability.to_excel(os.path.join(basic_path, 'fund_manager_fund_corp_teamstability.xlsx'))
         return fund_manager_fund_corp_teamstability
@@ -1416,7 +1584,7 @@ class Factor_Compute(CALFUNC):
 
     @lazyproperty
     def FUND_MANAGER_FUND_MANAGER_AWARDRECORD(self):
-        #基金经理在管基金基金经理平均年限的简单平均
+        #基金经理在管基金获奖支数（同支基金多次获奖按一次计算）的总和（暂不支持历史）
         fund_collection=pd.read_excel(date_dair+"\\fund\\download_from_wind\\基金公司基本资料.xlsx",header=0,index_col=None,usecols=None,squeeze=False)
         fund_collection.rename(columns={'证券代码':'wind_code', '基金经理平均年限\r':'fund_averageworkingyears', '证券简称':'sec_name', '任职基金获奖记录\r':'fund_manager_awardrecord', '基金经理成熟度':'fund_corp_fundmanagermaturity'}, inplace = True)
         fund_collection=fund_collection[:-2]
@@ -1453,6 +1621,7 @@ class Factor_Compute(CALFUNC):
         #基金经理在管基金跟踪误差（年化）的简单平均
         data=Data()
         risk_annutrackerror=data.risk_annutrackerror
+        #risk_annutrackerror=self.risk_annutrackerror
         fund_manager_detail=pd.read_excel(os.path.join(basic_path, 'fund_manager_detail.xlsx'),index_col=0)
         def as_datetime(x):
             if pd.isnull(x):
@@ -1466,6 +1635,11 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,risk_annutrackerror,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_risk_annutrackerror = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_risk_annutrackerror=tool3.adjust_months(fund_manager_risk_annutrackerror,'Y')
+        fund_manager_risk_annutrackerror = tool3.append_df(fund_manager_risk_annutrackerror)
+        
+        
         fund_manager_risk_annutrackerror = CALFUNC.del_dat_early_than(fund_manager_risk_annutrackerror, START_YEAR)
         #fund_manager_risk_annutrackerror.to_excel(os.path.join(basic_path, 'fund_manager_risk_annutrackerror.xlsx'))
         return fund_manager_risk_annutrackerror
@@ -1501,34 +1675,802 @@ class Factor_Compute(CALFUNC):
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_fund_corp_fundmanagermaturity = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
         fund_manager_fund_corp_fundmanagermaturity = CALFUNC.del_dat_early_than(fund_manager_fund_corp_fundmanagermaturity, START_YEAR)
-        fund_manager_fund_corp_fundmanagermaturity.to_excel(os.path.join(basic_path, 'fund_manager_fund_corp_fundmanagermaturity.xlsx'))
+        #fund_manager_fund_corp_fundmanagermaturity.to_excel(os.path.join(basic_path, 'fund_manager_fund_corp_fundmanagermaturity.xlsx'))
         return fund_manager_fund_corp_fundmanagermaturity
 
 
 
 
+    @lazyproperty
+    def FUND_MANAGER_PRT_FUNDCOTOTALNETASSETS(self):
+        #基金经理在管基金基金管理人资产净值合计
+        data=Data()
+        prt_fundcototalnetassets=data.prt_fundcototalnetassets
+        fund_manager_detail=pd.read_excel(os.path.join(basic_path, 'fund_manager_detail.xlsx'),index_col=0)
+        def as_datetime(x):
+            if pd.isnull(x):
+                return x
+            else:
+                x_date=datetime.strptime(str(x),'%Y-%m-%d')
+                return x_date
+        fund_manager_detail['start_date']=fund_manager_detail['start_date'].apply(as_datetime)
+        fund_manager_detail['start_date_vaild']=fund_manager_detail['start_date_vaild'].apply(as_datetime)
+        fund_manager_detail['end_date']=fund_manager_detail['end_date'].apply(as_datetime)
+        df_temp=pd.merge(fund_manager_detail,prt_fundcototalnetassets,left_on='wind_code',right_on='wind_code',how='inner')
+        df_temp=df_temp.apply(tool3.cut_data,axis=1)
+        fund_manager_prt_fundcototalnetassets = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        fund_manager_prt_fundcototalnetassets = CALFUNC.del_dat_early_than(fund_manager_prt_fundcototalnetassets, START_YEAR)
+        #fund_manager_prt_fundcototalnetassets.to_excel(os.path.join(basic_path, 'fund_manager_prt_fundcototalnetassets.xlsx'))
+        return fund_manager_prt_fundcototalnetassets
+
+
+
+
+# =============================================================================
+#     @lazyproperty
+#     def FUND_MANAGER_PRT_FUNDCOTOTALNETASSETS(self):
+#         #基金公司大股东持股比例（暂不支持历史）
+#         #data=Data()
+#         #fund_manager_collection=data.fund_manager_collection
+#         fund_manager_collection=self.fund_manager_collection
+#         fund_manager_collection.reset_index(inplace=True)
+#         fund_manager_collection.drop_duplicates(subset='manager_ID',inplace=True)
+#         fund_corp_collection=pd.read_excel(date_dair+"\\fund\\download_from_wind\\基金公司.xlsx",header=0,index_col=None,usecols=None,squeeze=False)
+#         fund_corp_collection.rename(columns={'证券代码':'fundco_ID', '证券简称':'fundco', '大股东持股比例\r':'holder_pct', '注册资本\r':'regcapital','董事会人数\r':'employee_board','基金经理人均管理产品数\r':'corp_productnopermanager'}, inplace = True)
+#         fund_corp_collection=fund_corp_collection[:-2]
+#         df_temp=pd.merge(fund_manager_collection,fund_corp_collection,left_on='fundco',right_on='fundco',how='left')
+#         df_temp.set_index('manager_ID',inplace=True)
+#         
+#         
+#         tds=tool3.get_trade_days()
+#         fund_manager_prt_fundcototalnetassets=df_temp['holder_pct']
+#         fund_manager_prt_fundcototalnetassets=pd.DataFrame(np.array([fund_manager_prt_fundcototalnetassets]).repeat(len(tds), axis=0)).T
+#         fund_manager_prt_fundcototalnetassets.index.name='manager_ID'
+#         fund_manager_prt_fundcototalnetassets.columns=tds
+#         #fund_manager_prt_fundcototalnetassets.to_excel(os.path.join(basic_path, 'fund_manager_prt_fundcototalnetassets.xlsx'))
+#         return fund_manager_prt_fundcototalnetassets
+# =============================================================================
+
+
+
+
+    @lazyproperty
+    def FUND_MANAGER_HOLDER_PCT(self):
+        #基金公司大股东持股比例（暂不支持历史）
+        #data=Data()
+        #fund_manager_collection=data.fund_manager_collection
+        fund_manager_collection=self.fund_manager_collection
+        fund_manager_collection.reset_index(inplace=True)
+        fund_manager_collection.drop_duplicates(subset='manager_ID',inplace=True)
+        fund_corp_collection=pd.read_excel(date_dair+"\\fund\\download_from_wind\\基金公司.xlsx",header=0,index_col=None,usecols=None,squeeze=False)
+        fund_corp_collection.rename(columns={'证券代码':'fundco_ID', '证券简称':'fundco', '大股东持股比例\r':'holder_pct', '注册资本\r':'regcapital','董事会人数\r':'employee_board','基金经理人均管理产品数\r':'corp_productnopermanager'}, inplace = True)
+        fund_corp_collection=fund_corp_collection[:-2]
+        df_temp=pd.merge(fund_manager_collection,fund_corp_collection,left_on='fundco',right_on='fundco',how='left')
+        df_temp.set_index('manager_ID',inplace=True)
+        tds=tool3.get_trade_days()
+        fund_manager_holder_pct=df_temp['holder_pct']
+        fund_manager_holder_pct=pd.DataFrame(np.array([fund_manager_holder_pct]).repeat(len(tds), axis=0)).T
+        fund_manager_holder_pct.index.name='manager_ID'
+        fund_manager_holder_pct.columns=tds
+        #fund_manager_holder_pct.to_excel(os.path.join(basic_path, 'fund_manager_holder_pct.xlsx'))
+        return fund_manager_holder_pct
+
+
+
+
+    @lazyproperty
+    def FUND_MANAGER_REGCAPITAL(self):
+        #基金公司注册资本（暂不支持历史）
+        #data=Data()
+        #fund_manager_collection=data.fund_manager_collection
+        fund_manager_collection=self.fund_manager_collection
+        fund_manager_collection.reset_index(inplace=True)
+        fund_manager_collection.drop_duplicates(subset='manager_ID',inplace=True)
+        fund_corp_collection=pd.read_excel(date_dair+"\\fund\\download_from_wind\\基金公司.xlsx",header=0,index_col=None,usecols=None,squeeze=False)
+        fund_corp_collection.rename(columns={'证券代码':'fundco_ID', '证券简称':'fundco', '大股东持股比例\r':'holder_pct', '注册资本\r':'regcapital','董事会人数\r':'employee_board','基金经理人均管理产品数\r':'corp_productnopermanager'}, inplace = True)
+        fund_corp_collection=fund_corp_collection[:-2]
+        df_temp=pd.merge(fund_manager_collection,fund_corp_collection,left_on='fundco',right_on='fundco',how='left')
+        df_temp.set_index('manager_ID',inplace=True)
+        tds=tool3.get_trade_days()
+        fund_manager_regcapital=df_temp['regcapital']
+        fund_manager_regcapital=pd.DataFrame(np.array([fund_manager_regcapital]).repeat(len(tds), axis=0)).T
+        fund_manager_regcapital.index.name='manager_ID'
+        fund_manager_regcapital.columns=tds
+        #fund_manager_regcapital.to_excel(os.path.join(basic_path, 'fund_manager_regcapital.xlsx'))
+        return fund_manager_regcapital
+
+
+
+# =============================================================================
+#     @lazyproperty
+#     def FUND_MANAGER_EMPLOYEE_BOARD(self):
+#         #基金公司董事会人数（暂不支持历史）
+#         #data=Data()
+#         #fund_manager_collection=data.fund_manager_collection
+#         fund_manager_collection=self.fund_manager_collection
+#         fund_manager_collection.reset_index(inplace=True)
+#         fund_manager_collection.drop_duplicates(subset='manager_ID',inplace=True)
+#         fund_corp_collection=pd.read_excel(date_dair+"\\fund\\download_from_wind\\基金公司.xlsx",header=0,index_col=None,usecols=None,squeeze=False)
+#         fund_corp_collection.rename(columns={'证券代码':'fundco_ID', '证券简称':'fundco', '大股东持股比例\r':'holder_pct', '注册资本\r':'regcapital','董事会人数\r':'employee_board','基金经理人均管理产品数\r':'corp_productnopermanager'}, inplace = True)
+#         fund_corp_collection=fund_corp_collection[:-2]
+#         df_temp=pd.merge(fund_manager_collection,fund_corp_collection,left_on='fundco',right_on='fundco',how='left')
+#         df_temp.set_index('manager_ID',inplace=True)
+#         tds=tool3.get_trade_days()
+#         fund_manager_employee_board=df_temp['employee_board']
+#         fund_manager_employee_board=pd.DataFrame(np.array([fund_manager_employee_board]).repeat(len(tds), axis=0)).T
+#         fund_manager_employee_board.index.name='manager_ID'
+#         fund_manager_employee_board.columns=tds
+#         #fund_manager_employee_board.to_excel(os.path.join(basic_path, 'fund_manager_employee_board.xlsx'))
+#         return fund_manager_employee_board
+# =============================================================================
+    
+    
+    
+    
+    @lazyproperty
+    def FUND_MANAGER_EMPLOYEE_BOARD(self):
+        #基金公司董事会人数（暂不支持历史）
+        #data=Data()
+        #fund_manager_collection=data.fund_manager_collection
+        fund_manager_collection=self.fund_manager_collection
+        fund_manager_collection.reset_index(inplace=True)
+        fund_manager_collection.drop_duplicates(subset='manager_ID',inplace=True)
+        fund_corp_collection=pd.read_excel(date_dair+"\\fund\\download_from_wind\\基金公司.xlsx",header=0,index_col=None,usecols=None,squeeze=False)
+        fund_corp_collection.rename(columns={'证券代码':'fundco_ID', '证券简称':'fundco', '大股东持股比例\r':'holder_pct', '注册资本\r':'regcapital','董事会人数\r':'employee_board','基金经理人均管理产品数\r':'corp_productnopermanager'}, inplace = True)
+        fund_corp_collection=fund_corp_collection[:-2]
+        df_temp=pd.merge(fund_manager_collection,fund_corp_collection,left_on='fundco',right_on='fundco',how='left')
+        df_temp.set_index('manager_ID',inplace=True)
+        tds=tool3.get_trade_days()
+        fund_manager_employee_board=df_temp['employee_board']
+        fund_manager_employee_board=pd.DataFrame(np.array([fund_manager_employee_board]).repeat(len(tds), axis=0)).T
+        fund_manager_employee_board.index.name='manager_ID'
+        fund_manager_employee_board.columns=tds
+        #fund_manager_employee_board.to_excel(os.path.join(basic_path, 'fund_manager_employee_board.xlsx'))
+        return fund_manager_employee_board
+
+
+
+
+    @lazyproperty
+    def FUND_MANAGER_CORP_PRODUCTNOPERMANAGER(self):
+        #基金公司人均管理产品数（暂不支持历史）
+        data=Data()
+        fund_manager_collection=data.fund_manager_collection
+        fund_manager_collection=self.fund_manager_collection
+        fund_manager_collection.reset_index(inplace=True)
+        fund_manager_collection.drop_duplicates(subset='manager_ID',inplace=True)
+        fund_corp_collection=pd.read_excel(date_dair+"\\fund\\download_from_wind\\基金公司.xlsx",header=0,index_col=None,usecols=None,squeeze=False)
+        fund_corp_collection.rename(columns={'证券代码':'fundco_ID', '证券简称':'fundco', '大股东持股比例\r':'holder_pct', '注册资本\r':'regcapital','董事会人数\r':'employee_board','基金经理人均管理产品数\r':'corp_productnopermanager'}, inplace = True)
+        fund_corp_collection=fund_corp_collection[:-2]
+        df_temp=pd.merge(fund_manager_collection,fund_corp_collection,left_on='fundco',right_on='fundco',how='left')
+        df_temp.set_index('manager_ID',inplace=True)
+        tds=tool3.get_trade_days()
+        fund_manager_corp_productnopermanager=df_temp['corp_productnopermanager']
+        fund_manager_corp_productnopermanager=pd.DataFrame(np.array([fund_manager_corp_productnopermanager]).repeat(len(tds), axis=0)).T
+        fund_manager_corp_productnopermanager.index.name='manager_ID'
+        fund_manager_corp_productnopermanager.columns=tds
+        #fund_manager_corp_productnopermanager.to_excel(os.path.join(basic_path, 'fund_manager_corp_productnopermanager.xlsx'))
+        return fund_manager_corp_productnopermanager
+
+
+
+    @lazyproperty
+    def FUND_MANAGER_FUND_LIQUIDATION(self):
+        #基金公司年度清算基金的总和
+        '''
+        清算基金数据目前只可以从风控板块手动提出
+        '''
+        fund_liquidation=pd.read_excel(date_dair+"\\fund\\download_from_wind\\基金清算(明细).xlsx",header=0,index_col=None,usecols=None,squeeze=False)
+        fund_liquidation=fund_liquidation[:-2]
+        fund_liquidation['年份']=fund_liquidation['基金到期日'].apply(lambda x:str(x)[0:4])
+        fund_liquidation_table=pd.pivot_table(fund_liquidation,index='基金公司',columns='年份',values='代码',aggfunc='count')
+        ed=datetime.today()
+        tdc = [col for col in fund_liquidation_table.columns if int(col) <ed.year]
+        tdc_list=list(range(int(tdc[0]),int(tdc[-1])+1))
+        tdc_list_to_str=[str(col) for col in tdc_list]
+        fund_liquidation_table=fund_liquidation_table.reindex(columns=tdc_list_to_str)
+        tdc_yearend=[col+'-12-31' for col in tdc_list_to_str]
+        fund_liquidation_table.columns=tdc_yearend
+        fund_liquidation_table.reset_index(inplace=True)
+        data=Data()
+        fund_manager_collection=data.fund_manager_collection
+        #fund_manager_collection=self.fund_manager_collection
+        fund_manager_collection.reset_index(inplace=True)
+        fund_manager_collection.drop_duplicates(subset='manager_ID',inplace=True)
+        fund_corp_collection=pd.read_excel(date_dair+"\\fund\\download_from_wind\\基金公司.xlsx",header=0,index_col=None,usecols=None,squeeze=False)
+        fund_corp_collection.rename(columns={'证券代码':'fundco_ID', '证券简称':'fundco', '大股东持股比例\r':'holder_pct', '注册资本\r':'regcapital','董事会人数\r':'employee_board','基金经理人均管理产品数\r':'corp_productnopermanager'}, inplace = True)
+        fund_corp_collection=fund_corp_collection[:-2]
+        df_temp=pd.merge(fund_manager_collection,fund_liquidation_table,left_on='fundco',right_on='基金公司',how='left')
+        df_temp.set_index('manager_ID',inplace=True)
+        fund_manager_fund_liquidation=df_temp.reindex(columns=tdc_yearend)
+        
+        fund_manager_fund_liquidation=tool3.adjust_months(fund_manager_fund_liquidation,'Y')
+        fund_manager_fund_liquidation = tool3.append_df(fund_manager_fund_liquidation)
+        #fund_manager_fund_liquidation.to_excel(os.path.join(basic_path, 'fund_manager_fund_liquidation.xlsx'))
+        return fund_manager_fund_liquidation
+
+
+
+    @lazyproperty
+    def FUND_MANAGER_EXCESSRETURN(self):
+        #基金经理指数相对上证基金指数的超额收益率
+        data=Data()
+        pct_chg_of_fund_manager_index=data.pct_chg_of_fund_manager_index
+        pct_chg_of_index_price_daily=data.pct_chg_of_index_price_daily
+        pct_chg_of_fund_manager_index.reset_index(inplace=True)
+        pct_chg_of_fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        df_temp=pct_chg_of_fund_manager_index.T.sub(pct_chg_of_index_price_daily.loc['上证基金指数'], axis=0)
+        fund_manager_excessreturn=df_temp.T
+        #fund_manager_excessreturn.to_excel(os.path.join(basic_path, 'fund_manager_excessreturn.xlsx'))
+        return fund_manager_excessreturn
+
+
+
+    @lazyproperty
+    def FUND_MANAGER_STDDEV(self):
+        #基金经理指数过去一年的标准差
+        data=Data()
+        pct_chg_of_fund_manager_index=data.pct_chg_of_fund_manager_index
+        pct_chg_of_fund_manager_index.reset_index(inplace=True)
+        pct_chg_of_fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        def stddev(df, window=10):
+            """
+            Wrapper function to estimate rolling standard deviation.
+            :param df: a pandas DataFrame.
+            :param window: the rolling window.
+            :return: a pandas DataFrame with the time-series stddev over the past 'window' days.
+            """
+            return df.rolling(window,min_periods=1).std()
+        fund_manager_stddev=stddev(pct_chg_of_fund_manager_index.T,252)
+        fund_manager_stddev=fund_manager_stddev.T
+        #fund_manager_stddev.to_excel(os.path.join(basic_path, 'fund_manager_stddev.xlsx'))
+        return fund_manager_stddev
+
+
+
+
+
+    @lazyproperty
+    def FUND_MANAGER_SHARPE(self):
+        #基金经理指数近一年的夏普比率
+        #data=Data()
+        #pct_chg_of_fund_manager_index=data.pct_chg_of_fund_manager_index
+        pct_chg_of_fund_manager_index=self.pct_chg_of_fund_manager_index
+        pct_chg_of_fund_manager_index.reset_index(inplace=True)
+        pct_chg_of_fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        #fund_manager_stddev=data.fund_manager_stddev
+        fund_manager_stddev=self.fund_manager_stddev
+        fund_manager_stddev.reset_index(inplace=True)
+        fund_manager_stddev.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        fund_manager_sharpe=pct_chg_of_fund_manager_index/fund_manager_stddev
+        #fund_manager_sharpe.to_excel(os.path.join(basic_path, 'fund_manager_sharpe.xlsx'))
+        return fund_manager_sharpe
+
+
+
+
+# =============================================================================
+#     @lazyproperty
+#     def FUND_MANAGER_BETA(self):
+#         #基金经理所承担的市场风险
+#         #data=Data()
+#         #pct_chg_of_fund_manager_index=data.pct_chg_of_fund_manager_index
+#         pct_chg_of_fund_manager_index=self.pct_chg_of_fund_manager_index
+#         pct_chg_of_fund_manager_index.reset_index(inplace=True)
+#         pct_chg_of_fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+#         #pct_chg_of_index_price_daily=data.pct_chg_of_index_price_daily
+#         pct_chg_of_index_price_daily=self.pct_chg_of_index_price_daily
+#         df_temp=pct_chg_of_fund_manager_index.T.div(pct_chg_of_index_price_daily.loc['上证基金指数'], axis=0)
+#         fund_manager_beta=df_temp.T
+#         #fund_manager_beta.to_excel(os.path.join(basic_path, 'fund_manager_beta.xlsx'))
+#         return fund_manager_beta
+# =============================================================================
+
+
+
+
+    @lazyproperty
+    def FUND_MANAGER_CAPM(self):
+        #alpha:基金经理根据系统风险调整的超额收益率
+        #beta:基金经理相对于市场的系统风险
+        #R squared:基金经理的确定系数
+        data=Data()
+        pct_chg_of_fund_manager_index=data.pct_chg_of_fund_manager_index
+        #pct_chg_of_fund_manager_index=self.pct_chg_of_fund_manager_index
+        pct_chg_of_fund_manager_index.reset_index(inplace=True)
+        pct_chg_of_fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        pct_chg_of_index_price_daily=data.pct_chg_of_index_price_daily
+        x=pct_chg_of_index_price_daily.loc['上证基金指数']
+        y=pct_chg_of_fund_manager_index.T
+        filled_y = y.interpolate()#对y中的缺失值进行线性插值
+        def regression(model_frame):
+            try:
+                reg = LinearRegression().fit(np.array(model_frame.iloc[:,0]).reshape(-1,1),np.array(model_frame.iloc[:,-1]).reshape(-1,1))  # 拟合调参
+                r2=reg.score(np.array(model_frame.iloc[:,0]).reshape(-1,1), np.array(model_frame.iloc[:,-1]).reshape(-1,1))  # 拟合程度，1.0最高
+                alpha=reg.intercept_[0]
+                beta=reg.coef_[0][0]
+                return r2,alpha,beta
+            except Exception as e:
+                r2=np.nan
+                alpha=np.nan
+                beta=np.nan
+                return r2,alpha,beta
+        r2=filled_y.copy()
+        alpha=filled_y.copy()
+        beta=filled_y.copy()
+# =============================================================================
+#         for col in filled_y.columns.values:
+#             t=filled_y[col]
+#             model_frame=pd.concat([x,t],axis=1)
+#             model_frame.dropna(axis=0, how='any',inplace=True)
+#             r2[col],alpha[col],beta[col]=regression(model_frame)
+# =============================================================================
+        for col in filled_y.columns.values:
+            t=filled_y[col]
+            model_frame=pd.DataFrame()
+            model_frame=pd.concat([x,t],axis=1)
+            model_frame.dropna(axis=0, how='any',inplace=True)
+            try:
+                results = rolling_ols(x=model_frame.iloc[:,0], y=model_frame.iloc[:,-1], window=min(len(model_frame.iloc[:,-1])-1,252))
+                r2[col]=results.ss_reg.div(results.ss_tot)
+                alpha[col]=results.alpha
+                beta[col]=results.beta
+            except Exception as e:
+                r2[col]=np.nan
+                alpha[col]=np.nan
+                beta[col]=np.nan
+        alpha=alpha.T
+        beta=beta.T
+        r2=r2.T
+
+
+# =============================================================================
+#         fund_manager_alpha=data.fund_manager_alpha
+#         fund_manager_alpha.reset_index(inplace=True)
+#         fund_manager_alpha.set_index(['manager_ID','firstinvesttype'],inplace=True)
+#         fund_manager_beta=data.fund_manager_beta
+#         fund_manager_beta.reset_index(inplace=True)
+#         fund_manager_beta.set_index(['manager_ID','firstinvesttype'],inplace=True)
+#         fund_manager_r2=data.fund_manager_r2
+#         fund_manager_r2.reset_index(inplace=True)
+#         fund_manager_r2.set_index(['manager_ID','firstinvesttype'],inplace=True)
+# =============================================================================
+
+        alpha = CALFUNC.del_dat_early_than(alpha, START_YEAR)
+        beta = CALFUNC.del_dat_early_than(beta, START_YEAR)
+        r2 = CALFUNC.del_dat_early_than(r2, START_YEAR)
+        
+        alpha=tool3.cleaning(alpha)
+        beta=tool3.cleaning(beta)
+        r2=tool3.cleaning(r2)
+        
+        
+        #fund_manager_alpha.to_excel(os.path.join(basic_path, 'fund_manager_alpha.xlsx'))
+        #fund_manager_beta.to_excel(os.path.join(basic_path, 'fund_manager_beta.xlsx'))
+        #fund_manager_r2.to_excel(os.path.join(basic_path, 'fund_manager_r2.xlsx'))
+        
+        res_dict = {
+            'fund_manager_alpha': alpha,
+            'fund_manager_beta': beta,
+            'fund_manager_r2': r2
+            }
+        
+        return res_dict
+
+
+
+
+
+    @lazyproperty
+    def FUND_MANAGER_TREYNOR(self):
+        #基金经理指数近一年的特雷诺比率
+        data=Data()
+        pct_chg_of_fund_manager_index=data.pct_chg_of_fund_manager_index
+        #pct_chg_of_fund_manager_index=self.pct_chg_of_fund_manager_index
+        pct_chg_of_fund_manager_index.reset_index(inplace=True)
+        pct_chg_of_fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        fund_manager_beta=data.fund_manager_beta
+        #fund_manager_beta=self.fund_manager_beta
+        fund_manager_beta.reset_index(inplace=True)
+        fund_manager_beta.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        fund_manager_treynor=pct_chg_of_fund_manager_index.div(fund_manager_beta, axis=1)
+        fund_manager_treynor.to_excel(os.path.join(basic_path, 'fund_manager_treynor.xlsx'))
+        return fund_manager_treynor
+
+
+
+
+    @lazyproperty
+    def FUND_MANAGER_DOWN_STDDEV(self):
+        #基金经理指数近一年的下行风险
+        data=Data()
+        pct_chg_of_fund_manager_index=data.pct_chg_of_fund_manager_index
+        pct_chg_of_fund_manager_index=self.pct_chg_of_fund_manager_index
+        pct_chg_of_fund_manager_index.reset_index(inplace=True)
+        pct_chg_of_fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        #df_temp=pct_chg_of_fund_manager_index.T
+        def down_stddev(df, window=10):
+            """
+            Wrapper function to estimate rolling downside deviation.
+            :param df: a pandas DataFrame.
+            :param window: the rolling window.
+            :return: a pandas DataFrame with the time-series stddev over the past 'window' days.
+            """
+            def calculate_down_stddev(t):
+                t[t>=0] = 0
+                t[t<0] = t**2
+                return np.sqrt(t.mean())
+            return df.rolling(window,min_periods=1).apply(calculate_down_stddev)
+        fund_manager_down_stddev=down_stddev(pct_chg_of_fund_manager_index.T,252)
+        fund_manager_down_stddev=fund_manager_down_stddev.T
+        #fund_manager_down_stddev.to_excel(os.path.join(basic_path, 'fund_manager_down_stddev.xlsx'))
+        return fund_manager_down_stddev
+
+
+
+
+    @lazyproperty
+    def FUND_MANAGER_SORTINO(self):
+        #基金经理指数近一年的索提诺比率
+        #data=Data()
+        #pct_chg_of_fund_manager_index=data.pct_chg_of_fund_manager_index
+        pct_chg_of_fund_manager_index=self.pct_chg_of_fund_manager_index
+        pct_chg_of_fund_manager_index.reset_index(inplace=True)
+        pct_chg_of_fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        #fund_manager_down_stddev=data.fund_manager_down_stddev
+        fund_manager_down_stddev=self.fund_manager_down_stddev
+        fund_manager_down_stddev.reset_index(inplace=True)
+        fund_manager_down_stddev.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        fund_manager_sortino=pct_chg_of_fund_manager_index.div(fund_manager_down_stddev,axis=1)
+        #fund_manager_sortino.to_excel(os.path.join(basic_path, 'fund_manager_sortino.xlsx'))
+        return fund_manager_sortino
+
+
+
+    @lazyproperty
+    def FUND_MANAGER_TE(self):
+        #基金经理指数近一年的跟踪误差
+        #data=Data()
+        #fund_manager_excessreturn=data.fund_manager_excessreturn
+        fund_manager_excessreturn=self.fund_manager_excessreturn
+        fund_manager_excessreturn.reset_index(inplace=True)
+        fund_manager_excessreturn.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        fund_manager_te=((fund_manager_excessreturn.T).rolling(window=252,min_periods=1).std()).T
+        #fund_manager_te.to_excel(os.path.join(basic_path, 'fund_manager_te.xlsx'))
+        return fund_manager_te
+
+
+
+
+    @lazyproperty
+    def FUND_MANAGER_IR(self):
+        #基金经理指数近一年相对市场基金指数的信息比率
+        data=Data()
+        fund_manager_excessreturn=data.fund_manager_excessreturn
+        fund_manager_excessreturn=self.fund_manager_excessreturn
+        fund_manager_excessreturn.reset_index(inplace=True)
+        fund_manager_excessreturn.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        fund_manager_te=data.fund_manager_te
+        fund_manager_te=self.fund_manager_te
+        fund_manager_te.reset_index(inplace=True)
+        fund_manager_te.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        fund_manager_ir=fund_manager_excessreturn.div(fund_manager_te,axis=1)
+        fund_manager_ir.to_excel(os.path.join(basic_path, 'fund_manager_ir.xlsx'))
+        return fund_manager_ir
 
 
 
 
 
 
+# =============================================================================
+#     @lazyproperty
+#     def FUND_MANAGER_MAXDRAWDOWN_3M(self):
+#         #基金经理指数过去一个季度的最大回撤    day=63
+#         data=Data()
+#         fund_manager_index=data.fund_manager_index
+#         #fund_manager_index=self.fund_manager_index
+#         fund_manager_index.drop(["manager"],axis=1,inplace=True) 
+#         fund_manager_index.reset_index(inplace=True)
+#         fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+#         def maxdrawdown(data):
+#             index_j = np.argmax(np.fmax.accumulate(data) - data)  # 结束位置
+#             index_i = np.argmax(data[:index_j])  # 开始位置
+#             d = data[index_j] - data[index_i]  # 最大回撤
+#             return d/data[index_i]
+#         df_temp=fund_manager_index.T
+#         df_temp.dropna(axis=1, how='all',inplace=True)
+#         fund_manager_maxdrawdown_3m=df_temp.copy()
+#         for col in df_temp.columns.values:
+#             t=df_temp[col]
+#             t.dropna(inplace=True)
+#             try:
+#                 tt=t.rolling(window=min(63,len(t)-1)).apply(maxdrawdown)
+#                 fund_manager_maxdrawdown_3m[col]=tt
+#             except Exception as e:
+#                 fund_manager_maxdrawdown_3m[col]=np.nan
+#         fund_manager_maxdrawdown_3m=fund_manager_maxdrawdown_3m.T
+#         #fund_manager_maxdrawdown_3m.to_excel(os.path.join(basic_path, 'fund_manager_maxdrawdown_3m.xlsx'))
+#         return fund_manager_maxdrawdown_3m
+# =============================================================================
+
+
+
+    @lazyproperty
+    def FUND_MANAGER_MAXDRAWDOWN_3M(self):
+        #基金经理指数过去一个季度的最大回撤    day=63
+        #data=Data()
+        #fund_manager_index=data.fund_manager_index
+        fund_manager_index=self.fund_manager_index
+        fund_manager_index.drop(["manager"],axis=1,inplace=True) 
+        fund_manager_index.reset_index(inplace=True)
+        fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        def maxdrawdown(data):
+            index_j = np.argmax(np.fmax.accumulate(data) - data)  # 结束位置
+            index_i = np.argmax(data[:index_j])  # 开始位置
+            d = data[index_j] - data[index_i]  # 最大回撤
+            return d/data[index_i]
+        df_temp=fund_manager_index.T
+        df_temp.dropna(axis=1, how='all',inplace=True)
+        fund_manager_maxdrawdown_3m=df_temp.copy()
+        for col in df_temp.columns.values:
+            t=df_temp[col]
+            t.dropna(inplace=True)
+            try:
+                tt=t.rolling(window=min(63,len(t)-1)).apply(maxdrawdown)
+                fund_manager_maxdrawdown_3m[col]=tt
+            except Exception as e:
+                fund_manager_maxdrawdown_3m[col]=np.nan
+        fund_manager_maxdrawdown_3m=fund_manager_maxdrawdown_3m.T
+        #fund_manager_maxdrawdown_3m.to_excel(os.path.join(basic_path, 'fund_manager_maxdrawdown_3m.xlsx'))
+        return fund_manager_maxdrawdown_3m
 
 
 
 
 
+    @lazyproperty
+    def FUND_MANAGER_MAXDRAWDOWN_1Y(self):
+        #基金经理指数过去一年的最大回撤    day=252
+        data=Data()
+        fund_manager_index=data.fund_manager_index
+        #fund_manager_index=self.fund_manager_index
+        fund_manager_index.drop(["manager"],axis=1,inplace=True) 
+        fund_manager_index.reset_index(inplace=True)
+        fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        def maxdrawdown(data):
+            index_j = np.argmax(np.fmax.accumulate(data) - data)  # 结束位置
+            index_i = np.argmax(data[:index_j])  # 开始位置
+            d = data[index_j] - data[index_i]  # 最大回撤
+            return d/data[index_i]
+        df_temp=fund_manager_index.T
+        df_temp.dropna(axis=1, how='all',inplace=True)
+        fund_manager_maxdrawdown_1y=df_temp.copy()
+        for col in df_temp.columns.values:
+            t=df_temp[col]
+            t.dropna(inplace=True)
+            try:
+                tt=t.rolling(window=min(252,len(t)-1)).apply(maxdrawdown)
+                fund_manager_maxdrawdown_1y[col]=tt
+            except Exception as e:
+                fund_manager_maxdrawdown_1y[col]=np.nan
+        fund_manager_maxdrawdown_1y=fund_manager_maxdrawdown_1y.T
+        #fund_manager_maxdrawdown_1y.to_excel(os.path.join(basic_path, 'fund_manager_maxdrawdown_1y.xlsx'))
+        return fund_manager_maxdrawdown_1y
 
 
 
 
 
+    @lazyproperty
+    def FUND_MANAGER_DRAWDOWN_1Y(self):
+        #基金经理指数的回撤（相较于近一年高点）
+        data=Data()
+        fund_manager_index=data.fund_manager_index
+        #fund_manager_index=self.fund_manager_index
+        fund_manager_index.drop(["manager"],axis=1,inplace=True) 
+        fund_manager_index.reset_index(inplace=True)
+        fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        def drawdown(data):
+            d = data[-1] - max(data)  # 相较于近一年高点回撤
+            return d/max(data)
+        df_temp=fund_manager_index.T
+        df_temp.dropna(axis=1, how='all',inplace=True)
+        fund_manager_drawdown_1y=df_temp.copy()
+        for col in df_temp.columns.values:
+            t=df_temp[col]
+            t.dropna(inplace=True)
+            try:
+                tt=t.rolling(window=min(252,len(t)-1),min_periods=2).apply(drawdown)
+                fund_manager_drawdown_1y[col]=tt
+            except Exception as e:
+                fund_manager_drawdown_1y[col]=np.nan
+        fund_manager_drawdown_1y=fund_manager_drawdown_1y.T
+        #fund_manager_drawdown_1y.to_excel(os.path.join(basic_path, 'fund_manager_drawdown_1y.xlsx'))
+        return fund_manager_drawdown_1y
 
 
 
 
 
+    @lazyproperty
+    def FUND_MANAGER_MAXDRAWDOWN_DURATION_1Y(self):
+        #基金经理指数过去一年的最大回撤久期(天)    day=252
+        data=Data()
+        fund_manager_index=data.fund_manager_index
+        #fund_manager_index=self.fund_manager_index
+        fund_manager_index.drop(["manager"],axis=1,inplace=True) 
+        fund_manager_index.reset_index(inplace=True)
+        fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        def maxdrawdown_duration(data):
+            index_j =data.index.values[np.argmax(np.fmax.accumulate(data) - data)]   # 结束位置
+            index_i =data.index.values[np.argmax(data[:index_j])]   # 开始位置
+            try:
+                index_d= [x for x in np.where(data>=data[index_i])[0] if x>index_j][0]
+            except Exception as e:
+                index_d=data.index.values[-1]
+            return (index_d-index_i).astype('timedelta64[D]')/np.timedelta64(1, 'D')
+        df_temp=fund_manager_index.T
+        df_temp.dropna(axis=1, how='all',inplace=True)
+        fund_manager_maxdrawdown_duration_1y=df_temp.copy()
+        for col in df_temp.columns.values:
+            t=df_temp[col]
+            t.dropna(inplace=True)
+            try:
+                tt=t.rolling(window=min(252,len(t)-1)).apply(maxdrawdown_duration)
+                fund_manager_maxdrawdown_duration_1y[col]=tt
+            except Exception as e:
+                fund_manager_maxdrawdown_duration_1y[col]=np.nan
+        fund_manager_maxdrawdown_duration_1y=fund_manager_maxdrawdown_duration_1y.T
+        #fund_manager_maxdrawdown_duration_1y.to_excel(os.path.join(basic_path, 'fund_manager_maxdrawdown_duration_1y.xlsx'))
+        return fund_manager_maxdrawdown_duration_1y
 
+
+
+    @lazyproperty
+    def pct_chg_of_fund_manager_index_m(self):
+        #data=Data()
+        #pct_chg_of_fund_manager_index=data.pct_chg_of_fund_manager_index
+        pct_chg_of_fund_manager_index=self.pct_chg_of_fund_manager_index
+        pct_chg_of_fund_manager_index.reset_index(inplace=True)
+        pct_chg_of_fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        
+        
+        tds = trade_days()
+        
+        # 得到月末日期列表
+        months_end = []
+        for i in range(1, len(tds)):
+            if tds[i].month != tds[i - 1].month:
+                months_end.append(tds[i - 1])
+            elif i == len(tds) - 1:
+                months_end.append(tds[i])
+        try:
+            months_end = [me for me in months_end if me.year >= d_df.columns[0].year]
+        except Exception as e:
+            print('debug')
+        
+        # 赵到对应的月末日期列表，可能年月同日不同的情况
+        new_col = []
+        for col in pct_chg_of_fund_manager_index.columns:
+            for me in months_end:
+                if col.year == me.year and col.month == me.month:
+                    new_col.append(me)
+        new_col = sorted(list(set(new_col)))
+        
+        pct_chg_of_fund_manager_index.columns = pd.to_datetime(pct_chg_of_fund_manager_index.columns)
+        pct_chg_of_fund_manager_index_m=pct_chg_of_fund_manager_index.groupby([pct_chg_of_fund_manager_index.columns.year,pct_chg_of_fund_manager_index.columns.month],axis=1).sum()
+        pct_chg_of_fund_manager_index_m.columns=new_col
+        pct_chg_of_fund_manager_index_m[pct_chg_of_fund_manager_index_m==0]=np.nan
+        #pct_chg_of_fund_manager_index_m.to_excel(os.path.join(basic_path, 'pct_chg_of_fund_manager_index_m.xlsx'))
+        return pct_chg_of_fund_manager_index_m
+
+
+
+    @lazyproperty
+    def pct_chg_of_fund_manager_index_m(self):
+        #data=Data()
+        #pct_chg_of_fund_manager_index=data.pct_chg_of_fund_manager_index
+        pct_chg_of_fund_manager_index=self.pct_chg_of_fund_manager_index
+        pct_chg_of_fund_manager_index.reset_index(inplace=True)
+        pct_chg_of_fund_manager_index.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        
+        
+        tds = trade_days()
+        
+        # 得到月末日期列表
+        months_end = []
+        for i in range(1, len(tds)):
+            if tds[i].month != tds[i - 1].month:
+                months_end.append(tds[i - 1])
+            elif i == len(tds) - 1:
+                months_end.append(tds[i])
+        try:
+            months_end = [me for me in months_end if me.year >= d_df.columns[0].year]
+        except Exception as e:
+            print('debug')
+        
+        # 赵到对应的月末日期列表，可能年月同日不同的情况
+        new_col = []
+        for col in pct_chg_of_fund_manager_index.columns:
+            for me in months_end:
+                if col.year == me.year and col.month == me.month:
+                    new_col.append(me)
+        new_col = sorted(list(set(new_col)))
+        
+        pct_chg_of_fund_manager_index.columns = pd.to_datetime(pct_chg_of_fund_manager_index.columns)
+        pct_chg_of_fund_manager_index_m=pct_chg_of_fund_manager_index.groupby([pct_chg_of_fund_manager_index.columns.year,pct_chg_of_fund_manager_index.columns.month],axis=1).sum()
+        pct_chg_of_fund_manager_index_m.columns=new_col
+        pct_chg_of_fund_manager_index_m[pct_chg_of_fund_manager_index_m==0]=np.nan
+        #pct_chg_of_fund_manager_index_m.to_excel(os.path.join(basic_path, 'pct_chg_of_fund_manager_index_m.xlsx'))
+        return pct_chg_of_fund_manager_index_m
+
+
+
+    @lazyproperty
+    def pct_chg_of_fund_manager_index_n3m(self):
+        #data=Data()
+        #pct_chg_of_fund_manager_index_m=data.pct_chg_of_fund_manager_index_m
+        pct_chg_of_fund_manager_index_m=self.pct_chg_of_fund_manager_index_m
+        pct_chg_of_fund_manager_index_m.reset_index(inplace=True)
+        pct_chg_of_fund_manager_index_m.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        pct_chg_of_fund_manager_index_n3m=pct_chg_of_fund_manager_index_m.shift(periods=-1, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-2, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-3, axis=1)
+        #pct_chg_of_fund_manager_index_n3m.to_excel(os.path.join(basic_path, 'pct_chg_of_fund_manager_index_n3m.xlsx'))
+        return pct_chg_of_fund_manager_index_n3m
+
+
+
+
+
+    @lazyproperty
+    def pct_chg_of_fund_manager_index_n6m(self):
+        #data=Data()
+        #pct_chg_of_fund_manager_index_m=data.pct_chg_of_fund_manager_index_m
+        pct_chg_of_fund_manager_index_m=self.pct_chg_of_fund_manager_index_m
+        pct_chg_of_fund_manager_index_m.reset_index(inplace=True)
+        pct_chg_of_fund_manager_index_m.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        pct_chg_of_fund_manager_index_n6m=pct_chg_of_fund_manager_index_m.shift(periods=-1, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-2, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-3, axis=1)\
+            +pct_chg_of_fund_manager_index_m.shift(periods=-4, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-5, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-6, axis=1)
+        #pct_chg_of_fund_manager_index_n6m.to_excel(os.path.join(basic_path, 'pct_chg_of_fund_manager_index_n6m.xlsx'))
+        return pct_chg_of_fund_manager_index_n6m
+
+
+
+
+    @lazyproperty
+    def pct_chg_of_fund_manager_index_n1y(self):
+        #data=Data()
+        #pct_chg_of_fund_manager_index_m=data.pct_chg_of_fund_manager_index_m
+        pct_chg_of_fund_manager_index_m=self.pct_chg_of_fund_manager_index_m
+        pct_chg_of_fund_manager_index_m.reset_index(inplace=True)
+        pct_chg_of_fund_manager_index_m.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        pct_chg_of_fund_manager_index_n1y=pct_chg_of_fund_manager_index_m.shift(periods=-1, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-2, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-3, axis=1)\
+            +pct_chg_of_fund_manager_index_m.shift(periods=-4, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-5, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-6, axis=1)\
+                +pct_chg_of_fund_manager_index_m.shift(periods=-7, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-8, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-9, axis=1)\
+                    +pct_chg_of_fund_manager_index_m.shift(periods=-10, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-11, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-12, axis=1)
+        #pct_chg_of_fund_manager_index_n1y.to_excel(os.path.join(basic_path, 'pct_chg_of_fund_manager_index_n1y.xlsx'))
+        return pct_chg_of_fund_manager_index_n1y
+
+
+
+
+
+    def pct_chg_of_fund_manager_index_n2y(self):
+        #data=Data()
+        #pct_chg_of_fund_manager_index_m=data.pct_chg_of_fund_manager_index_m
+        pct_chg_of_fund_manager_index_m=self.pct_chg_of_fund_manager_index_m
+        pct_chg_of_fund_manager_index_m.reset_index(inplace=True)
+        pct_chg_of_fund_manager_index_m.set_index(['manager_ID','firstinvesttype'],inplace=True)
+        pct_chg_of_fund_manager_index_n2y=pct_chg_of_fund_manager_index_m.shift(periods=-1, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-2, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-3, axis=1)\
+            +pct_chg_of_fund_manager_index_m.shift(periods=-4, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-5, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-6, axis=1)\
+                +pct_chg_of_fund_manager_index_m.shift(periods=-7, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-8, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-9, axis=1)\
+                    +pct_chg_of_fund_manager_index_m.shift(periods=-10, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-11, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-12, axis=1)\
+                        +pct_chg_of_fund_manager_index_m.shift(periods=-13, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-14, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-15, axis=1)\
+                            +pct_chg_of_fund_manager_index_m.shift(periods=-16, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-17, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-18, axis=1)\
+                                +pct_chg_of_fund_manager_index_m.shift(periods=-19, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-20, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-21, axis=1)\
+                                    +pct_chg_of_fund_manager_index_m.shift(periods=-22, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-23, axis=1)+pct_chg_of_fund_manager_index_m.shift(periods=-24, axis=1)
+        #pct_chg_of_fund_manager_index_n2y.to_excel(os.path.join(basic_path, 'pct_chg_of_fund_manager_index_n2y.xlsx'))
+        return pct_chg_of_fund_manager_index_n2y
 
 
 
@@ -1701,7 +2643,7 @@ if __name__ == "__main__":
     #compute_factor('all')
 
     # 测试某个因子
-    f='FUND_MANAGER_SELLSIDE'# 这里可以且需要改因子名
+    f='FUND_MANAGER_MAXDRAWDOWN_3M'# 这里可以且需要改因子名
     def saving(f):
         fc = Factor_Compute('all')  # 这里可以选择状态是从头算（all）还是只更新最后一列（update）
         factor_names = [f]

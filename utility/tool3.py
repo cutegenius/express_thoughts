@@ -17,8 +17,8 @@ def adjust_months(d_df, orig='Q'):
 
     # 原始数据为季度数据
     if orig == 'Q':
-        # 删除12月份的数据
-        tdc = [col for col in d_df.columns if col.month == 12]
+        # 删除12月份的数据及不应该出现的月份吧
+        tdc = [col for col in d_df.columns if col.month == 1 or col.month ==2 or col.month ==4 or col.month ==5 or col.month ==7 or col.month ==8 or col.month ==10 or col.month ==11 or col.month ==12]
         d_df = d_df.drop(tdc, axis=1)
 
         # 把公告月份调整为实际月份
@@ -32,8 +32,32 @@ def adjust_months(d_df, orig='Q'):
                 new_cols.append(datetime(col.year, 10, 31))
 
         d_df.columns = new_cols
+        
+        
+    # 原始数据为半年度数据
+    if orig == 'H':
+        
+        # 删除不应该出现月份的数据
+        tdc = [col for col in d_df.columns if col.month == 1 or col.month ==2 or col.month ==3 or col.month ==4 or col.month ==5 or col.month ==7 or col.month ==8 or col.month ==9 or col.month ==10 or col.month ==11 ]
+        d_df = d_df.drop(tdc, axis=1)
+        
+        # 把公告月份调整为实际月份
+        new_cols = []
+        for col in d_df.columns:
+            if col.month == 6:
+                new_cols.append(datetime(col.year, 8, 31))
+            if col.month == 12:
+                new_cols.append(datetime(col.year, 3, 31))
+
+        d_df.columns = new_cols
+        
     # 原始数据为年度数据
     elif orig == 'Y':
+        
+        # 删除不应该出现月份的数据
+        tdc = [col for col in d_df.columns if col.month == 1 or col.month ==2 or col.month ==3 or col.month ==4 or col.month ==5 or col.month ==6 or col.month ==7 or col.month ==8 or col.month ==9 or col.month ==10 or col.month ==11 ]
+        d_df = d_df.drop(tdc, axis=1)
+        
         new_cols = [datetime(col.year + 1, 4, 30) for col in d_df.columns]
         d_df.columns = new_cols
 
@@ -251,3 +275,21 @@ def cut_data(t):
                 if isinstance(ele,pd._libs.tslibs.timestamps.Timestamp):
                     t[ele]=np.nan
             return t
+
+def cleaning(df,n=3):#既包括了MAD去极值，又包括了Z-Score标准化
+    def f(x):
+        Xmedian=x.median()
+        Xmad=(x-Xmedian).abs().median()
+        cond1=(Xmedian+n*Xmad)
+        cond2=(Xmedian-n*Xmad)
+        x[x>cond1]=cond1
+        x[x<cond2]=cond2
+        Xmean=x.mean()
+        Xstd=x.std()
+        z=(x-Xmean)/Xstd
+        return z
+    return df.apply(f)
+
+
+    
+
