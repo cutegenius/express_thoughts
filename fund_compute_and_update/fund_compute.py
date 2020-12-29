@@ -1699,8 +1699,12 @@ class Factor_Compute(CALFUNC):
         df_temp=pd.merge(fund_manager_detail,prt_fundcototalnetassets,left_on='wind_code',right_on='wind_code',how='inner')
         df_temp=df_temp.apply(tool3.cut_data,axis=1)
         fund_manager_prt_fundcototalnetassets = df_temp.groupby(['manager_ID', 'firstinvesttype']).mean()
+        
+        fund_manager_prt_fundcototalnetassets=tool3.adjust_months(fund_manager_prt_fundcototalnetassets,'Q')
+        fund_manager_prt_fundcototalnetassets = tool3.append_df(fund_manager_prt_fundcototalnetassets)
+        
         fund_manager_prt_fundcototalnetassets = CALFUNC.del_dat_early_than(fund_manager_prt_fundcototalnetassets, START_YEAR)
-        #fund_manager_prt_fundcototalnetassets.to_excel(os.path.join(basic_path, 'fund_manager_prt_fundcototalnetassets.xlsx'))
+        fund_manager_prt_fundcototalnetassets.to_excel(os.path.join(basic_path, 'fund_manager_prt_fundcototalnetassets.xlsx'))
         return fund_manager_prt_fundcototalnetassets
 
 

@@ -1,4 +1,4 @@
-
+from utility.relate_to_tushare import generate_months_ends
 import os
 import calendar
 import warnings
@@ -197,6 +197,28 @@ def append_df(d_df, target_feq='M', fill_type='preceding'):
     res_df.sum()
 
     return res_df
+
+
+
+
+
+
+# 日频率的数据转化为月频率的数据
+def d_freq_to_m_freq(dat, shift=False):
+    # 如果 shift为True，表示使用下一个交易日的数据来做月末数据
+    me = generate_months_ends()
+    new_cols = [m for m in me if m in dat.columns]
+
+    if shift:
+        dat = dat.shift(-1, axis=1)
+
+    new_dat = dat[new_cols]
+
+    return new_dat
+
+
+
+
 
 
 def get_trade_days():
