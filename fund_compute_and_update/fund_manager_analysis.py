@@ -36,6 +36,9 @@ from sklearn.linear_model import LinearRegression
 from scipy.interpolate import interp1d
 from utility.relate_to_tushare import trade_days
 #For simplicity, we will assume a risk-free rate of 0% and target return of 0%.
+import math
+
+
 
 
 try:
@@ -3313,41 +3316,26 @@ class Factor_Manager_Analysis(CALFUNC):
 
 
 
-
-
-
-
     @staticmethod
-    def backwardtest_stock(start_date=datetime(year=2009, month=1, day=1),end_date=datetime(year=2020, month=9, day=30)):
+    def backward_test_typestock(start_date=datetime(year=2009, month=1, day=1),end_date=datetime(year=2020, month=9, day=30)):
         data=Data()
         start_date=datetime(year=2009, month=1, day=1)
         end_date=end_date=datetime(year=2020, month=9, day=30)
-        IC=dict()
-        dict_len=len(fund_manager_factor_dict)
-        keys=list(fund_manager_factor_dict.keys())
-        pct_chg_of_fund_manager_index_n3m=data.pct_chg_of_fund_manager_index_n3m
-        pct_chg_of_fund_manager_index_n3m.reset_index(inplace=True)
-        pct_chg_of_fund_manager_index_n3m.set_index(['firstinvesttype','manager_ID'],inplace=True)
-        pct_chg_of_fund_manager_index_n6m=data.pct_chg_of_fund_manager_index_n6m
-        pct_chg_of_fund_manager_index_n6m.reset_index(inplace=True)
-        pct_chg_of_fund_manager_index_n6m.set_index(['firstinvesttype','manager_ID'],inplace=True)
-        pct_chg_of_fund_manager_index_n1y=data.pct_chg_of_fund_manager_index_n1y
-        pct_chg_of_fund_manager_index_n1y.reset_index(inplace=True)
-        pct_chg_of_fund_manager_index_n1y.set_index(['firstinvesttype','manager_ID'],inplace=True)
-        pct_chg_of_fund_manager_index_n2y=data.pct_chg_of_fund_manager_index_n2y
-        pct_chg_of_fund_manager_index_n2y.reset_index(inplace=True)
-        pct_chg_of_fund_manager_index_n2y.set_index(['firstinvesttype','manager_ID'],inplace=True)
-        
-        pct_chg_of_fund_manager_index_n3m=tool3.cleaning(pct_chg_of_fund_manager_index_n3m)
-        pct_chg_of_fund_manager_index_n6m=tool3.cleaning(pct_chg_of_fund_manager_index_n6m)
-        pct_chg_of_fund_manager_index_n1y=tool3.cleaning(pct_chg_of_fund_manager_index_n1y)
-        pct_chg_of_fund_manager_index_n2y=tool3.cleaning(pct_chg_of_fund_manager_index_n2y)
-        
-        
-        
         month_ends=generate_months_ends()
         month_ends=[col for col in month_ends if col>=start_date and col<=end_date]
-
+        
+        dict_len=len(fund_manager_factor_dict)
+        keys=list(fund_manager_factor_dict.keys())
+        
+        
+        
+        pct_chg_of_fund_manager_index=data.pct_chg_of_fund_manager_index
+        pct_chg_of_fund_manager_index.reset_index(inplace=True)
+        pct_chg_of_fund_manager_index.set_index(['firstinvesttype','manager_ID'],inplace=True)
+        pct_chg_of_fund_manager_index=pct_chg_of_fund_manager_index.loc['股票型基金']
+        combinedfactor_stock=data.combinedfactor_stock
+        pct_chg_of_index_price_daily=(data.pct_chg_of_index_price_daily).T
+        
         for i in range(dict_len):
             key1=keys[i]
             factor=eval('data.' + key1)
@@ -3358,7 +3346,7 @@ class Factor_Manager_Analysis(CALFUNC):
                 factor1.set_index(['firstinvesttype','manager_ID'],inplace=True)
                 factor1=tool3.cleaning(factor1)
                 try:
-                    factor1=factor1.loc['另类投资基金']
+                    factor1=factor1.loc['股票型基金']
                     if key1 in d_freq_factor_list:
                         factor1=tool3.d_freq_to_m_freq(factor1)
                         factor1.columns=pd.DatetimeIndex(factor1.columns)
@@ -3378,93 +3366,226 @@ class Factor_Manager_Analysis(CALFUNC):
                     factor1.columns=pd.DatetimeIndex(factor1.columns)
                     fund_manager_factor_dict[key1]=factor1
                     fund_manager_factor_dict[key1]=factor1
-        combinedfactor_alternative=(((((((((((fund_manager_factor_dict['fund_manager_1y_return']*(1/12)).sub(fund_manager_factor_dict['fund_manager_3y_return']*(1/12),fill_value=0)).sub(fund_manager_factor_dict['fund_manager_treynor']*(1/12),fill_value=0)).add(fund_manager_factor_dict['fund_manager_sortino']*(1/12),fill_value=0)).sub(fund_manager_factor_dict['fund_manager_r2']*(1/12),fill_value=0)).sub(fund_manager_factor_dict['fund_manager_maxdrawdown_1y']*(1/12),fill_value=0)).sub(fund_manager_factor_dict['fund_manager_custodianfeeratio']*(1/12),fill_value=0)).add(fund_manager_factor_dict['fund_manager_fund_liquidation']*(1/12),fill_value=0)).sub(fund_manager_factor_dict['fund_manager_holder_pct']*(1/12),fill_value=0)).sub(fund_manager_factor_dict['fund_manager_prt_fundcototalnetassets']*(1/12),fill_value=0)).sub(fund_manager_factor_dict['fund_manager_1y_periodreturnranking']*(1/12),fill_value=0)).add(fund_manager_factor_dict['fund_manager_corp_productnopermanager']*(1/12),fill_value=0)
-        for month_end in month_ends:
-            IC_dataframe=pd.DataFrame()
-            n3m=pct_chg_of_fund_manager_index_n3m.loc['另类投资基金',month_end]
-            n6m=pct_chg_of_fund_manager_index_n6m.loc['另类投资基金',month_end]
-            n1y=pct_chg_of_fund_manager_index_n1y.loc['另类投资基金',month_end]
-            n2y=pct_chg_of_fund_manager_index_n2y.loc['另类投资基金',month_end]
+
+
+
+        group_table=pd.DataFrame()
+        for i in range(dict_len):
+            key1=keys[i]
+            d_df=fund_manager_factor_dict[key1]
+            group1_lst=[]
+            group2_lst=[]
+            group3_lst=[]
+            group4_lst=[]
+            group5_lst=[]
+            group6_lst=[]
+            group7_lst=[]
+            group8_lst=[]
+            group9_lst=[]
+            group10_lst=[]
+            group1=pd.Series()
+            group2=pd.Series()
+            group3=pd.Series()
+            group4=pd.Series()
+            group5=pd.Series()
+            group6=pd.Series()
+            group7=pd.Series()
+            group8=pd.Series()
+            group9=pd.Series()
+            group10=pd.Series()
+            new_cols = []
+            group_plot=pd.DataFrame()
+            for col in d_df.columns:
+                if col.month == 3:
+                    new_cols.append(col)
+                if col.month == 6:
+                    new_cols.append(col)
+                if col.month == 9:
+                    new_cols.append(col)
+                if col.month == 12:
+                    new_cols.append(col)
+            new_cols_len=len(new_cols)
+            for j in range(new_cols_len):
+                try:
+                    col1=new_cols[j]
+                    col2=new_cols[j+1]
+                    t=d_df[col]
+                    t=t.dropna()
+                    t_sorted=t.sort_values(ascending=False)
+                    manager_ID_lst=t_sorted.index.values
+                    group1_lst=manager_ID_lst[0:math.ceil(len(manager_ID_lst)*0.1)]
+                    group2_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.1):math.ceil(len(manager_ID_lst)*0.2)]
+                    group3_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.2):math.ceil(len(manager_ID_lst)*0.3)]
+                    group4_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.3):math.ceil(len(manager_ID_lst)*0.4)]
+                    group5_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.4):math.ceil(len(manager_ID_lst)*0.5)]
+                    group6_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.5):math.ceil(len(manager_ID_lst)*0.6)]
+                    group7_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.6):math.ceil(len(manager_ID_lst)*0.7)]
+                    group8_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.7):math.ceil(len(manager_ID_lst)*0.8)]
+                    group9_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.8):math.ceil(len(manager_ID_lst)*0.9)]
+                    group10_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.9):]
+                    group1_t=(pct_chg_of_fund_manager_index.reindex(index=group1_lst)).loc[:,col1:col2].mean(axis=0)
+                    group2_t=(pct_chg_of_fund_manager_index.reindex(index=group2_lst)).loc[:,col1:col2].mean(axis=0)
+                    group3_t=(pct_chg_of_fund_manager_index.reindex(index=group3_lst)).loc[:,col1:col2].mean(axis=0)
+                    group4_t=(pct_chg_of_fund_manager_index.reindex(index=group4_lst)).loc[:,col1:col2].mean(axis=0)
+                    group5_t=(pct_chg_of_fund_manager_index.reindex(index=group5_lst)).loc[:,col1:col2].mean(axis=0)
+                    group6_t=(pct_chg_of_fund_manager_index.reindex(index=group6_lst)).loc[:,col1:col2].mean(axis=0)
+                    group7_t=(pct_chg_of_fund_manager_index.reindex(index=group7_lst)).loc[:,col1:col2].mean(axis=0)
+                    group8_t=(pct_chg_of_fund_manager_index.reindex(index=group8_lst)).loc[:,col1:col2].mean(axis=0)
+                    group9_t=(pct_chg_of_fund_manager_index.reindex(index=group9_lst)).loc[:,col1:col2].mean(axis=0)
+                    group10_t=(pct_chg_of_fund_manager_index.reindex(index=group10_lst)).loc[:,col1:col2].mean(axis=0)
+                    group1=pd.concat([group1,group1_t])
+                    group2=pd.concat([group2,group2_t])
+                    group3=pd.concat([group3,group3_t])
+                    group4=pd.concat([group4,group4_t])
+                    group5=pd.concat([group5,group5_t])
+                    group6=pd.concat([group6,group6_t])
+                    group7=pd.concat([group7,group7_t])
+                    group8=pd.concat([group8,group8_t])
+                    group9=pd.concat([group9,group9_t])
+                    group10=pd.concat([group10,group10_t])
+                    group_plot['group1']=group1
+                    group_plot['group2']=group2
+                    group_plot['group3']=group3
+                    group_plot['group4']=group4
+                    group_plot['group5']=group5
+                    group_plot['group6']=group6
+                    group_plot['group7']=group7
+                    group_plot['group8']=group8
+                    group_plot['group9']=group9
+                    group_plot['group10']=group10
+                    group_plot=group_plot+1
+                    group_plot=group_plot.cumprod()
+                    group_plot.to_excel(os.path.join(plot_path, key1+'_backwardtest_stock.xlsx'))
+                except Exception as e:
+                    break
+                group_table.loc[key1,'group1']=group1.sum()
+                group_table.loc[key1,'group2']=group2.sum()
+                group_table.loc[key1,'group3']=group3.sum()
+                group_table.loc[key1,'group4']=group4.sum()
+                group_table.loc[key1,'group5']=group5.sum()
+                group_table.loc[key1,'group6']=group6.sum()
+                group_table.loc[key1,'group7']=group7.sum()
+                group_table.loc[key1,'group8']=group8.sum()
+                group_table.loc[key1,'group9']=group9.sum()
+                group_table.loc[key1,'group10']=group10.sum()
+                
+                
+                
+                
+        key1='combinedfactor_stock'
+        d_df=combinedfactor_stock
+        group1_lst=[]
+        group2_lst=[]
+        group3_lst=[]
+        group4_lst=[]
+        group5_lst=[]
+        group6_lst=[]
+        group7_lst=[]
+        group8_lst=[]
+        group9_lst=[]
+        group10_lst=[]
+        group1=pd.Series()
+        group2=pd.Series()
+        group3=pd.Series()
+        group4=pd.Series()
+        group5=pd.Series()
+        group6=pd.Series()
+        group7=pd.Series()
+        group8=pd.Series()
+        group9=pd.Series()
+        group10=pd.Series()
+        new_cols = []
+        group_plot=pd.DataFrame()
+        for col in d_df.columns:
+            if col.month == 3:
+                new_cols.append(col)
+            if col.month == 6:
+                new_cols.append(col)
+            if col.month == 9:
+                new_cols.append(col)
+            if col.month == 12:
+                new_cols.append(col)
+        new_cols_len=len(new_cols)
+
+        for j in range(new_cols_len):
             try:
-                t=combinedfactor_alternative[month_end]
-                IC_3m=t.corr(n3m)
-                IC_6m=t.corr(n6m)
-                IC_1y=t.corr(n1y)
-                IC_2y=t.corr(n2y)
-                IC_dataframe.loc['combinedfactor_alternative','3m']=IC_3m
-                IC_dataframe.loc['combinedfactor_alternative','6m']=IC_6m
-                IC_dataframe.loc['combinedfactor_alternative','1y']=IC_1y
-                IC_dataframe.loc['combinedfactor_alternative','2y']=IC_2y
+                col1=new_cols[j]
+                col2=new_cols[j+1]
+                t=d_df[col]
+                t=t.dropna()
+                t_sorted=t.sort_values(ascending=False)
+                manager_ID_lst=t_sorted.index.values
+                group1_lst=manager_ID_lst[0:math.ceil(len(manager_ID_lst)*0.1)]
+                group2_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.1):math.ceil(len(manager_ID_lst)*0.2)]
+                group3_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.2):math.ceil(len(manager_ID_lst)*0.3)]
+                group4_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.3):math.ceil(len(manager_ID_lst)*0.4)]
+                group5_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.4):math.ceil(len(manager_ID_lst)*0.5)]
+                group6_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.5):math.ceil(len(manager_ID_lst)*0.6)]
+                group7_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.6):math.ceil(len(manager_ID_lst)*0.7)]
+                group8_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.7):math.ceil(len(manager_ID_lst)*0.8)]
+                group9_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.8):math.ceil(len(manager_ID_lst)*0.9)]
+                group10_lst=manager_ID_lst[math.ceil(len(manager_ID_lst)*0.9):]
+                group1_t=(pct_chg_of_fund_manager_index.reindex(index=group1_lst)).loc[:,col1:col2].mean(axis=0)
+                group2_t=(pct_chg_of_fund_manager_index.reindex(index=group2_lst)).loc[:,col1:col2].mean(axis=0)
+                group3_t=(pct_chg_of_fund_manager_index.reindex(index=group3_lst)).loc[:,col1:col2].mean(axis=0)
+                group4_t=(pct_chg_of_fund_manager_index.reindex(index=group4_lst)).loc[:,col1:col2].mean(axis=0)
+                group5_t=(pct_chg_of_fund_manager_index.reindex(index=group5_lst)).loc[:,col1:col2].mean(axis=0)
+                group6_t=(pct_chg_of_fund_manager_index.reindex(index=group6_lst)).loc[:,col1:col2].mean(axis=0)
+                group7_t=(pct_chg_of_fund_manager_index.reindex(index=group7_lst)).loc[:,col1:col2].mean(axis=0)
+                group8_t=(pct_chg_of_fund_manager_index.reindex(index=group8_lst)).loc[:,col1:col2].mean(axis=0)
+                group9_t=(pct_chg_of_fund_manager_index.reindex(index=group9_lst)).loc[:,col1:col2].mean(axis=0)
+                group10_t=(pct_chg_of_fund_manager_index.reindex(index=group10_lst)).loc[:,col1:col2].mean(axis=0)
+                group1=pd.concat([group1,group1_t])
+                group2=pd.concat([group2,group2_t])
+                group3=pd.concat([group3,group3_t])
+                group4=pd.concat([group4,group4_t])
+                group5=pd.concat([group5,group5_t])
+                group6=pd.concat([group6,group6_t])
+                group7=pd.concat([group7,group7_t])
+                group8=pd.concat([group8,group8_t])
+                group9=pd.concat([group9,group9_t])
+                group10=pd.concat([group10,group10_t])
             except Exception as e:
-                IC_dataframe.loc['combinedfactor_alternative','3m']=np.nan
-                IC_dataframe.loc['combinedfactor_alternative','6m']=np.nan
-                IC_dataframe.loc['combinedfactor_alternative','1y']=np.nan
-                IC_dataframe.loc['combinedfactor_alternative','2y']=np.nan
-            IC[month_end]=IC_dataframe
+                continue
             
-        #tt=IC
-        IC_3m_dataframe=pd.DataFrame()
-        IC_6m_dataframe=pd.DataFrame()
-        IC_1y_dataframe=pd.DataFrame()
-        IC_2y_dataframe=pd.DataFrame()
-        for month_end in month_ends:
-            IC_3m_dataframe[month_end]=IC[month_end]['3m']
-            IC_6m_dataframe[month_end]=IC[month_end]['6m']
-            IC_1y_dataframe[month_end]=IC[month_end]['1y']
-            IC_2y_dataframe[month_end]=IC[month_end]['2y']
+            
+        group_plot['group1']=group1
+        group_plot['group2']=group2
+        group_plot['group3']=group3
+        group_plot['group4']=group4
+        group_plot['group5']=group5
+        group_plot['group6']=group6
+        group_plot['group7']=group7
+        group_plot['group8']=group8
+        group_plot['group9']=group9
+        group_plot['group10']=group10
+        group_plot['HS300']=pct_chg_of_index_price_daily['HS300']
+        group_plot['股票基金']=pct_chg_of_index_price_daily['股票基金']
+        
+        group_plot=group_plot+1
+        group_plot=group_plot.cumprod()
+        group_plot.to_excel(os.path.join(plot_path, key1+'_backwardtest_stock.xlsx'))
+        
+        
+        
+        
+        group_table.loc[key1,'group1']=group1.sum()
+        group_table.loc[key1,'group2']=group2.sum()
+        group_table.loc[key1,'group3']=group3.sum()
+        group_table.loc[key1,'group4']=group4.sum()
+        group_table.loc[key1,'group5']=group5.sum()
+        group_table.loc[key1,'group6']=group6.sum()
+        group_table.loc[key1,'group7']=group7.sum()
+        group_table.loc[key1,'group8']=group8.sum()
+        group_table.loc[key1,'group9']=group9.sum()
+        group_table.loc[key1,'group10']=group10.sum()
+        
+        
+        group_table.to_excel(os.path.join(plot_path, 'group_test_stock.xlsx'))
+        
+        
 
 
-        IC_mean=pd.DataFrame()
-        #IC_max=pd.DataFrame()
-        IC_std=pd.DataFrame()
-        IR=pd.DataFrame()
-        #IR_max=pd.DataFrame()
-        IC_win=pd.DataFrame()
-        
-        
-        
-        IC_mean['3m']=IC_3m_dataframe.mean(axis=1)
-        IC_mean['6m']=IC_6m_dataframe.mean(axis=1)
-        IC_mean['1y']=IC_1y_dataframe.mean(axis=1)
-        IC_mean['2y']=IC_2y_dataframe.mean(axis=1)
-        
-        
-        
-        
-        IC_std['3m']=IC_3m_dataframe.std(axis=1)
-        IC_std['6m']=IC_6m_dataframe.std(axis=1)
-        IC_std['1y']=IC_1y_dataframe.std(axis=1)
-        IC_std['2y']=IC_2y_dataframe.std(axis=1)
-
-
-        IR=IC_mean/IC_std
-        
-        
-        
-        IC_win['3m']=IC_3m_dataframe[IC_3m_dataframe>0].count(axis=1)/IC_3m_dataframe.count(axis=1)
-        IC_win['6m']=IC_6m_dataframe[IC_6m_dataframe>0].count(axis=1)/IC_6m_dataframe.count(axis=1)
-        IC_win['1y']=IC_1y_dataframe[IC_1y_dataframe>0].count(axis=1)/IC_1y_dataframe.count(axis=1)
-        IC_win['2y']=IC_2y_dataframe[IC_2y_dataframe>0].count(axis=1)/IC_2y_dataframe.count(axis=1)
-
-        
-        
-        combinedfactortest_alternative=pd.DataFrame()
-        combinedfactortest_alternative['IC均值']=IC_mean.T['combinedfactor_alternative']
-        combinedfactortest_alternative['IC标准差']=IC_std.T['combinedfactor_alternative']
-        combinedfactortest_alternative['IR值']=IR.T['combinedfactor_alternative']
-        combinedfactortest_alternative['IC>0']=IC_win.T['combinedfactor_alternative']
-        
-        
-        combinedfactor_IC_alternative=pd.DataFrame()
-        combinedfactor_IC_alternative['3m']=IC_3m_dataframe.T['combinedfactor_alternative']
-        combinedfactor_IC_alternative['6m']=IC_6m_dataframe.T['combinedfactor_alternative']
-        combinedfactor_IC_alternative['1y']=IC_1y_dataframe.T['combinedfactor_alternative']
-        combinedfactor_IC_alternative['2y']=IC_2y_dataframe.T['combinedfactor_alternative']
-        
-        
-        combinedfactor_alternative.to_excel(os.path.join(basic_path, 'combinedfactor_alternative.xlsx'))
-        combinedfactortest_alternative.to_excel(os.path.join(plot_path, 'combinedfactortest_alternative.xlsx'))
-        combinedfactor_IC_alternative.to_excel(os.path.join(plot_path, 'combinedfactor_IC_alternative.xlsx'))
 
 
 
