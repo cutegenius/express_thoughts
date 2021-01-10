@@ -3839,15 +3839,6 @@ class Factor_Manager_Analysis(CALFUNC):
         group_plot['HS300']=pct_chg_of_index_price_daily['HS300']
         group_plot['股票基金']=pct_chg_of_index_price_daily['股票基金']
         
-        group_plot.dropna(axis='index', how='any', subset=['group1','HS300','股票基金'],inplace=True)
-        group_plot.fillna(0,inplace=True)
-        
-        
-        group_plot_return=group_plot.groupby(group_plot.index.year).sum()
-        group_plot_return['超额收益（HS300）']=group_plot_return['group1']-group_plot_return['HS300']
-        group_plot_return['超额收益（股票基金）']=group_plot_return['group1']-group_plot_return['股票基金']
-        group_plot_return.to_excel(os.path.join(plot_path, key1+'_return_stock.xlsx'))
-        
         group_plot=group_plot+1
         group_plot=group_plot.cumprod()
         group_plot.to_excel(os.path.join(plot_path, key1+'_backwardtest_stock.xlsx'))
@@ -4120,18 +4111,6 @@ class Factor_Manager_Analysis(CALFUNC):
         group_plot['group10']=group10
         group_plot['HS300']=pct_chg_of_index_price_daily['HS300']
         group_plot['债券基金']=pct_chg_of_index_price_daily['债券基金']
-        
-        group_plot.dropna(axis='index', how='any', subset=['group1','HS300','债券基金'],inplace=True)
-        group_plot.fillna(0,inplace=True)
-        
-        
-        group_plot_return=group_plot.groupby(group_plot.index.year).sum()
-        group_plot_return['超额收益（HS300）']=group_plot_return['group1']-group_plot_return['HS300']
-        group_plot_return['超额收益（债券基金）']=group_plot_return['group1']-group_plot_return['债券基金']
-        group_plot_return.to_excel(os.path.join(plot_path, key1+'_return_bond.xlsx'))
-        
-        
-
         
         group_plot=group_plot+1
         group_plot=group_plot.cumprod()
@@ -4407,16 +4386,6 @@ class Factor_Manager_Analysis(CALFUNC):
         group_plot['group10']=group10
         group_plot['HS300']=pct_chg_of_index_price_daily['HS300']
         group_plot['混合基金']=pct_chg_of_index_price_daily['混合基金']
-        
-        group_plot.dropna(axis='index', how='any', subset=['group1','HS300','混合基金'],inplace=True)
-        group_plot.fillna(0,inplace=True)
-        
-        
-        group_plot_return=group_plot.groupby(group_plot.index.year).sum()
-        group_plot_return['超额收益（HS300）']=group_plot_return['group1']-group_plot_return['HS300']
-        group_plot_return['超额收益（混合基金）']=group_plot_return['group1']-group_plot_return['混合基金']
-        group_plot_return.to_excel(os.path.join(plot_path, key1+'_return_hybrid.xlsx'))
-        
         
         group_plot=group_plot+1
         group_plot=group_plot.cumprod()
@@ -4696,17 +4665,6 @@ class Factor_Manager_Analysis(CALFUNC):
         group_plot['HS300']=pct_chg_of_index_price_daily['HS300']
         group_plot['货币基金']=pct_chg_of_index_price_daily['货币基金']
         
-        group_plot.dropna(axis='index', how='any', subset=['group1','HS300','货币基金'],inplace=True)
-        group_plot.fillna(0,inplace=True)
-        
-        
-        group_plot_return=group_plot.groupby(group_plot.index.year).sum()
-        group_plot_return['超额收益（HS300）']=group_plot_return['group1']-group_plot_return['HS300']
-        group_plot_return['超额收益（货币基金）']=group_plot_return['group1']-group_plot_return['货币基金']
-        group_plot_return.to_excel(os.path.join(plot_path, key1+'_return_money.xlsx'))
-        
-        
-        
         group_plot=group_plot+1
         group_plot=group_plot.cumprod()
         group_plot.to_excel(os.path.join(plot_path, key1+'_backwardtest_money.xlsx'))
@@ -4983,14 +4941,11 @@ class Factor_Manager_Analysis(CALFUNC):
         group_plot['group10']=group10
         group_plot['HS300']=pct_chg_of_index_price_daily['HS300']
         group_plot['上证基金指数']=pct_chg_of_index_price_daily['上证基金指数']
-        group_plot.dropna(axis='index', how='any', subset=['group1','HS300','上证基金指数'],inplace=True)
+        #group_plot.dropna(axis='index', how='any', subset=['group1','HS300','上证基金指数'],inplace=True)
         group_plot.fillna(0,inplace=True)
         
         
-        group_plot_return=group_plot.groupby(group_plot.index.year).sum()
-        group_plot_return['超额收益（HS300）']=group_plot_return['group1']-group_plot_return['HS300']
-        group_plot_return['超额收益（上证基金指数）']=group_plot_return['group1']-group_plot_return['上证基金指数']
-        group_plot_return.to_excel(os.path.join(plot_path, key1+'_return_alternative.xlsx'))
+        
         
         group_plot=group_plot+1
         group_plot=group_plot.cumprod()
@@ -5269,13 +5224,10 @@ class Factor_Manager_Analysis(CALFUNC):
         group_plot['group10']=group10
         group_plot['HS300']=pct_chg_of_index_price_daily['HS300']
         group_plot['QDII基金']=pct_chg_of_index_price_daily['QDII基金']
-        group_plot.dropna(axis='index', how='any', subset=['group1','HS300','QDII基金'],inplace=True)
+        #group_plot.dropna(axis='index', how='any', subset=['group1','HS300','上证基金指数'],inplace=True)
         group_plot.fillna(0,inplace=True)
         
-        group_plot_return=group_plot.groupby(group_plot.index.year).sum()
-        group_plot_return['超额收益（HS300）']=group_plot_return['group1']-group_plot_return['HS300']
-        group_plot_return['超额收益（QDII基金）']=group_plot_return['group1']-group_plot_return['QDII基金']
-        group_plot_return.to_excel(os.path.join(plot_path, key1+'_return_QDII.xlsx'))
+        
         
         
         group_plot=group_plot+1
@@ -5327,14 +5279,14 @@ class Factor_Manager_Analysis(CALFUNC):
         fund_manager_collection=data.fund_manager_collection
         fund_manager_collection.reset_index(inplace=True)
         fund_manager_collection.drop_duplicates(subset='manager_ID',inplace=True)
-        fund_manager_dict=dict(zip(fund_manager_collection['manager_ID'], fund_manager_collection['fund_manager']+'['+fund_manager_collection['fundco']+']'))
+        fund_manager_dict=dict(zip(fund_manager_collection['manager_ID'], fund_manager_collection['fund_manager']))
         
         
         stock['value']=pct_chg_of_fund_manager_index_m.loc['股票型基金',start_date]
         stock['factor']=combinedfactor_stock[start_date]
         stock.dropna(axis='index', how='any',inplace=True)
         stock_sorted=stock.sort_values(by = 'factor',axis = 0,ascending = False)
-        stock_lst=pd.Series(stock_sorted.index.values[0:15])
+        stock_lst=pd.Series(stock_sorted.index.values[0:10])
         stock_lst=stock_lst.map(fund_manager_dict)
         
         
@@ -5344,7 +5296,7 @@ class Factor_Manager_Analysis(CALFUNC):
         bond['factor']=combinedfactor_bond[start_date]
         bond.dropna(axis='index', how='any',inplace=True)
         bond_sorted=bond.sort_values(by = 'factor',axis = 0,ascending = False)
-        bond_lst=pd.Series(bond_sorted.index.values[0:15])
+        bond_lst=pd.Series(bond_sorted.index.values[0:10])
         bond_lst=bond_lst.map(fund_manager_dict)
         
         
@@ -5354,7 +5306,7 @@ class Factor_Manager_Analysis(CALFUNC):
         hybrid['factor']=combinedfactor_hybrid[start_date]
         hybrid.dropna(axis='index', how='any',inplace=True)
         hybrid_sorted=hybrid.sort_values(by = 'factor',axis = 0,ascending = False)
-        hybrid_lst=pd.Series(hybrid_sorted.index.values[0:15])
+        hybrid_lst=pd.Series(hybrid_sorted.index.values[0:10])
         hybrid_lst=hybrid_lst.map(fund_manager_dict)
         
         
@@ -5364,7 +5316,7 @@ class Factor_Manager_Analysis(CALFUNC):
         money['factor']=combinedfactor_money[start_date]
         money.dropna(axis='index', how='any',inplace=True)
         money_sorted=money.sort_values(by = 'factor',axis = 0,ascending = False)
-        money_lst=pd.Series(money_sorted.index.values[0:15])
+        money_lst=pd.Series(money_sorted.index.values[0:10])
         money_lst=money_lst.map(fund_manager_dict)
         
         
@@ -5375,7 +5327,7 @@ class Factor_Manager_Analysis(CALFUNC):
         alternative['factor']=combinedfactor_alternative[start_date]
         alternative.dropna(axis='index', how='any',inplace=True)
         alternative_sorted=alternative.sort_values(by = 'factor',axis = 0,ascending = False)
-        alternative_lst=pd.Series(alternative_sorted.index.values[0:15])
+        alternative_lst=pd.Series(alternative_sorted.index.values[0:10])
         alternative_lst=alternative_lst.map(fund_manager_dict)
         
         
@@ -5386,7 +5338,7 @@ class Factor_Manager_Analysis(CALFUNC):
         QDII['factor']=combinedfactor_QDII[start_date]
         QDII.dropna(axis='index', how='any',inplace=True)
         QDII_sorted=QDII.sort_values(by = 'factor',axis = 0,ascending = False)
-        QDII_lst=pd.Series(QDII_sorted.index.values[0:15])
+        QDII_lst=pd.Series(QDII_sorted.index.values[0:10])
         QDII_lst=QDII_lst.map(fund_manager_dict)
         
         
